@@ -1,0 +1,5 @@
+Sample DEMs for crater visualization (GeoTIFFs not included in this repo):
+- usgs_coastal_dem.tif (coastal region)
+- usgs_inland_dem.tif (inland region)
+
+To use: Place DEM GeoTIFFs in the static/ directory. Use provided functions in frontend for visualization.

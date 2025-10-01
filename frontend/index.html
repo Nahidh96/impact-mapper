@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meteor Madness - NASA Space Apps</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #0a1a2f; color: #fff; }
+    .container { max-width: 1200px; margin: auto; padding: 2rem; }
+    h1 { color: #ffd700; }
+    .controls, .stats, .game-mode { background: #162447; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; }
+    .slider-group { margin-bottom: 1rem; }
+    label { display: block; margin-bottom: 0.2rem; }
+    input[type=range] { width: 100%; }
+    .tooltip { color: #ffd700; cursor: help; border-bottom: 1px dotted #ffd700; }
+    #threejs-canvas { width: 100%; height: 350px; background: #111; border-radius: 8px; }
+    #map { width: 100%; height: 300px; border-radius: 8px; margin-top: 1rem; }
+    .stats-table { width: 100%; border-collapse: collapse; }
+    .stats-table td { padding: 0.5rem; }
+    .stats-table tr:nth-child(even) { background: #1f4068; }
+    .defend-btn { background: #ffd700; color: #162447; border: none; padding: 0.7rem 1.5rem; border-radius: 5px; font-size: 1.1rem; cursor: pointer; margin-top: 1rem; }
+    .defend-btn:hover { background: #fff; color: #0a1a2f; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Meteor Madness <span style="font-size:0.6em;">(NASA Space Apps)</span></h1>
+    <div class="controls">
+      <h2>Asteroid Impact Simulator</h2>
+      <div class="slider-group">
+        <label>Diameter (m) <span class="tooltip" title="Asteroid diameter in meters. Typical NEOs: 10-1000m.">?</span></label>
+        <input type="range" id="diameter" min="10" max="1000" value="150" step="1" />
+        <span id="diameter-val">150</span>
+      </div>
+      <div class="slider-group">
+        <label>Velocity (km/s) <span class="tooltip" title="Impact velocity. Most NEOs hit at 11-72 km/s.">?</span></label>
+        <input type="range" id="velocity" min="11" max="72" value="22.5" step="0.1" />
+        <span id="velocity-val">22.5</span>
+      </div>
+      <div class="slider-group">
+        <label>Density (kg/m³) <span class="tooltip" title="Bulk density. Typical: 2000-8000 kg/m³. Default: 3000.">?</span></label>
+        <input type="range" id="density" min="2000" max="8000" value="3200" step="10" />
+        <span id="density-val">3200</span>
+      </div>
+      <div class="slider-group">
+        <label>Deflection Δv (km/s) <span class="tooltip" title="Change in velocity from deflection mission. Reduces impact energy.">?</span></label>
+        <input type="range" id="delta-v" min="0" max="10" value="0" step="0.1" />
+        <span id="delta-v-val">0</span>
+      </div>
+      <div class="slider-group">
+        <label>Impact Location <span class="tooltip" title="Click on the map to set impact location.">?</span></label>
+        <span id="impact-location">(not set)</span>
+      </div>
+    </div>
+    <div class="stats">
+      <h2>Impact Results</h2>
+      <table class="stats-table">
+        <tr><td>Kinetic Energy (J)</td><td id="ke"></td></tr>
+        <tr><td>TNT Equivalent (tons)</td><td id="tnt"></td></tr>
+        <tr><td>Crater Diameter (m)</td><td id="crater"></td></tr>
+        <tr><td>Seismic Magnitude (Mw)</td><td id="seismic"></td></tr>
+      </table>
+    </div>
+    <div class="game-mode">
+      <h2>Defend Earth Mode <span class="tooltip" title="Try to deflect the asteroid! Set Δv and time before impact. Orbit will update (mocked).">?</span></h2>
+      <label>Time Before Impact (days): <input type="number" id="time-before-impact" min="1" max="365" value="30" /></label>
+      <button class="defend-btn" onclick="defendEarth()">Simulate Deflection</button>
+      <div id="defend-result"></div>
+    </div>
+    <h2>3D Orbit Visualization</h2>
+    <div id="threejs-canvas"></div>
+    <h2>2D Impact Map</h2>
+    <div id="map"></div>
+  </div>
+  <script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    // --- UI State ---
+    let impactLat = null, impactLng = null;
+    function updateSlider(id, valId) {
+      const el = document.getElementById(id);
+      const val = document.getElementById(valId);
+      el.addEventListener('input', () => { val.textContent = el.value; simulate(); });
+      val.textContent = el.value;
+    }
+    updateSlider('diameter', 'diameter-val');
+    updateSlider('velocity', 'velocity-val');
+    updateSlider('density', 'density-val');
+    updateSlider('delta-v', 'delta-v-val');
+    document.getElementById('diameter').addEventListener('change', simulate);
+    document.getElementById('velocity').addEventListener('change', simulate);
+    document.getElementById('density').addEventListener('change', simulate);
+    document.getElementById('delta-v').addEventListener('change', simulate);
+
+    // --- Impact Simulation ---
+    async function simulate() {
+      const diameter = +document.getElementById('diameter').value;
+      const velocity = +document.getElementById('velocity').value;
+      const density = +document.getElementById('density').value;
+      const delta_v = +document.getElementById('delta-v').value;
+      const res = await fetch('http://localhost:5000/simulate-impact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ diameter, velocity, density, delta_v })
+      });
+      const data = await res.json();
+      document.getElementById('ke').textContent = data.kinetic_energy_j.toExponential(3);
+      document.getElementById('tnt').textContent = data.tnt_equivalent_tons.toLocaleString(undefined, { maximumFractionDigits: 0 });
+      document.getElementById('crater').textContent = data.crater_diameter_m.toFixed(1);
+      document.getElementById('seismic').textContent = data.seismic_magnitude_mw.toFixed(2);
+      updateCraterOnMap(data.crater_diameter_m);
+    }
+    simulate();
+
+    // --- 2D Map (Leaflet) ---
+    const map = L.map('map').setView([20, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 8,
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    let craterCircle = null;
+    map.on('click', function(e) {
+      impactLat = e.latlng.lat;
+      impactLng = e.latlng.lng;
+      document.getElementById('impact-location').textContent = `${impactLat.toFixed(2)}, ${impactLng.toFixed(2)}`;
+      updateCraterOnMap();
+    });
+    function updateCraterOnMap(craterDiam) {
+      if (impactLat === null || impactLng === null) return;
+      if (craterCircle) map.removeLayer(craterCircle);
+      // Convert crater diameter (m) to degrees (approx, for demo)
+      const deg = (craterDiam || 1000) / 111320;
+      craterCircle = L.circle([impactLat, impactLng], { radius: deg * 111320, color: '#ffd700', fillOpacity: 0.3 }).addTo(map);
+    }
+
+    // --- 3D Orbit Visualization (Three.js) ---
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, 1.8, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(document.getElementById('threejs-canvas').clientWidth, 350);
+    document.getElementById('threejs-canvas').appendChild(renderer.domElement);
+    // Earth
+    const earthGeo = new THREE.SphereGeometry(1, 32, 32);
+    const earthMat = new THREE.MeshPhongMaterial({ color: 0x2266ff, emissive: 0x112244 });
+    const earth = new THREE.Mesh(earthGeo, earthMat);
+    scene.add(earth);
+    // Asteroid orbit (mock ellipse)
+    const curve = new THREE.EllipseCurve(0, 0, 2.5, 1.5, 0, 2 * Math.PI, false, 0);
+    const points = curve.getPoints(100).map(p => new THREE.Vector3(p.x, 0, p.y));
+    const orbitGeo = new THREE.BufferGeometry().setFromPoints(points);
+    const orbitMat = new THREE.LineBasicMaterial({ color: 0xffd700 });
+    const orbit = new THREE.Line(orbitGeo, orbitMat);
+    scene.add(orbit);
+    // Asteroid (mock position)
+    const asteroidGeo = new THREE.SphereGeometry(0.1, 16, 16);
+    const asteroidMat = new THREE.MeshPhongMaterial({ color: 0xffd700 });
+    const asteroid = new THREE.Mesh(asteroidGeo, asteroidMat);
+    asteroid.position.set(2.5, 0, 0);
+    scene.add(asteroid);
+    // Lighting
+    const light = new THREE.PointLight(0xffffff, 1, 100);
+    light.position.set(5, 5, 5);
+    scene.add(light);
+    camera.position.set(0, 2, 6);
+    function animate() {
+      asteroid.position.x = 2.5 * Math.cos(Date.now() * 0.0002);
+      asteroid.position.z = 1.5 * Math.sin(Date.now() * 0.0002);
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+    animate();
+
+    // --- Defend Earth Mode (Mock) ---
+    function defendEarth() {
+      const delta_v = +document.getElementById('delta-v').value;
+      const tbi = +document.getElementById('time-before-impact').value;
+      // Mock: Show new orbit (just change color)
+      orbit.material.color.set(delta_v > 0 ? 0x00ff00 : 0xffd700);
+      document.getElementById('defend-result').textContent = delta_v > 0 ?
+        `Deflection applied! Asteroid path altered (mocked).` :
+        `No deflection. Asteroid remains on collision course.`;
+    }
+  </script>
+</body>
+</html>

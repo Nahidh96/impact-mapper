@@ -1,0 +1,13 @@
+{
+  "id": "2025-AB",
+  "name": "Mock Asteroid",
+  "estimated_diameter_m": 150,
+  "velocity_kms": 22.5,
+  "density_kgm3": 3200,
+  "close_approach_date": "2025-10-01",
+  "orbit": {
+    "semi_major_axis_au": 1.2,
+    "eccentricity": 0.15,
+    "inclination_deg": 5.2
+  }
+}
