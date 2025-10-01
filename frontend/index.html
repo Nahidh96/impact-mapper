@@ -3,184 +3,685 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Meteor Madness - NASA Space Apps</title>
+  <title>Meteor Madness • Mission Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; background: #0a1a2f; color: #fff; }
-    .container { max-width: 1200px; margin: auto; padding: 2rem; }
-    h1 { color: #ffd700; }
-    .controls, .stats, .game-mode { background: #162447; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; }
-    .slider-group { margin-bottom: 1rem; }
-    label { display: block; margin-bottom: 0.2rem; }
-    input[type=range] { width: 100%; }
-    .tooltip { color: #ffd700; cursor: help; border-bottom: 1px dotted #ffd700; }
-    #threejs-canvas { width: 100%; height: 350px; background: #111; border-radius: 8px; }
-    #map { width: 100%; height: 300px; border-radius: 8px; margin-top: 1rem; }
-    .stats-table { width: 100%; border-collapse: collapse; }
-    .stats-table td { padding: 0.5rem; }
-    .stats-table tr:nth-child(even) { background: #1f4068; }
-    .defend-btn { background: #ffd700; color: #162447; border: none; padding: 0.7rem 1.5rem; border-radius: 5px; font-size: 1.1rem; cursor: pointer; margin-top: 1rem; }
-    .defend-btn:hover { background: #fff; color: #0a1a2f; }
-  </style>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="container">
-    <h1>Meteor Madness <span style="font-size:0.6em;">(NASA Space Apps)</span></h1>
-    <div class="controls">
-      <h2>Asteroid Impact Simulator</h2>
-      <div class="slider-group">
-        <label>Diameter (m) <span class="tooltip" title="Asteroid diameter in meters. Typical NEOs: 10-1000m.">?</span></label>
-        <input type="range" id="diameter" min="10" max="1000" value="150" step="1" />
-        <span id="diameter-val">150</span>
-      </div>
-      <div class="slider-group">
-        <label>Velocity (km/s) <span class="tooltip" title="Impact velocity. Most NEOs hit at 11-72 km/s.">?</span></label>
-        <input type="range" id="velocity" min="11" max="72" value="22.5" step="0.1" />
-        <span id="velocity-val">22.5</span>
-      </div>
-      <div class="slider-group">
-        <label>Density (kg/m³) <span class="tooltip" title="Bulk density. Typical: 2000-8000 kg/m³. Default: 3000.">?</span></label>
-        <input type="range" id="density" min="2000" max="8000" value="3200" step="10" />
-        <span id="density-val">3200</span>
-      </div>
-      <div class="slider-group">
-        <label>Deflection Δv (km/s) <span class="tooltip" title="Change in velocity from deflection mission. Reduces impact energy.">?</span></label>
-        <input type="range" id="delta-v" min="0" max="10" value="0" step="0.1" />
-        <span id="delta-v-val">0</span>
-      </div>
-      <div class="slider-group">
-        <label>Impact Location <span class="tooltip" title="Click on the map to set impact location.">?</span></label>
-        <span id="impact-location">(not set)</span>
-      </div>
+  <header class="top-bar">
+    <div class="brand">
+      <span class="brand-mark">☄️</span>
+      <span class="brand-text">Meteor Madness</span>
     </div>
-    <div class="stats">
-      <h2>Impact Results</h2>
-      <table class="stats-table">
-        <tr><td>Kinetic Energy (J)</td><td id="ke"></td></tr>
-        <tr><td>TNT Equivalent (tons)</td><td id="tnt"></td></tr>
-        <tr><td>Crater Diameter (m)</td><td id="crater"></td></tr>
-        <tr><td>Seismic Magnitude (Mw)</td><td id="seismic"></td></tr>
-      </table>
+    <nav class="nav-links">
+      <a href="#mission">Mission</a>
+      <a href="#control">Control Deck</a>
+      <a href="#visualizations">Visuals</a>
+      <a href="#mission-control">Defend Earth</a>
+      <a href="#knowledge">Intel Hub</a>
+    </nav>
+    <button class="cta" id="cta-brief">Download Briefing</button>
+  </header>
+
+  <main class="app-shell">
+    <section class="hero" id="mission">
+      <div class="hero-copy">
+        <p class="tag">NASA Space Apps 2025 • Meteor Madness</p>
+        <h1>Coordinate the ultimate planetary defense mission.</h1>
+        <p class="subtitle">Stream real-time impact analytics, visualize asteroid trajectories, and deploy deflection strategies before time runs out.</p>
+        <div class="hero-actions">
+          <button class="primary" id="hero-run">Run Impact Simulation</button>
+          <button class="ghost" id="hero-save">Save Scenario Snapshot</button>
+        </div>
+        <div class="hero-metrics">
+          <div class="metric-card">
+            <p class="metric-label">Hackathon Clock</p>
+            <p class="metric-value" id="hackathon-countdown">48h 00m</p>
+            <p class="metric-sub">until NASA NEO feed unlocks</p>
+          </div>
+          <div class="metric-card">
+            <p class="metric-label">Live Risk Level</p>
+            <p class="metric-value" id="severity-label">Scanning...</p>
+            <p class="metric-sub" id="severity-tagline">Awaiting data</p>
+          </div>
+          <div class="metric-card">
+            <p class="metric-label">Mission Confidence</p>
+            <div class="confidence-bar"><span id="confidence-meter"></span></div>
+            <p class="metric-sub" id="confidence-copy">Configure parameters to begin.</p>
+          </div>
+        </div>
+      </div>
+      <aside class="hero-side">
+        <div class="briefing-card">
+          <h3>Latest NASA Mock NEO</h3>
+          <p class="neo-name" id="neo-name">Loading...</p>
+          <ul class="neo-facts" id="neo-facts">
+            <li>Diameter: —</li>
+            <li>Velocity: —</li>
+            <li>Close Approach: —</li>
+          </ul>
+          <button class="secondary" id="load-neo">Refresh Sample NEO</button>
+          <p class="neo-note">Real feed slots in automatically during the Space Apps window.</p>
+        </div>
+        <div class="scorecard">
+          <h3>Global Defense Leaderboard</h3>
+          <ol id="leaderboard">
+            <li><strong>Team Syntaxx</strong> — 98.6% mission readiness</li>
+            <li>EarthGuard Alliance — 94.2%</li>
+            <li>Lunar Shield Coalition — 91.8%</li>
+            <li>Planetary Watch — 88.5%</li>
+          </ol>
+          <p class="scorecard-note">Leaderboard recalculates with each saved scenario.</p>
+        </div>
+      </aside>
+    </section>
+
+    <section class="grid" id="control">
+      <article class="card control-panel">
+        <header>
+          <h2>Impact Parameter Deck</h2>
+          <p>Drag the sliders or punch in numbers to craft your scenario.</p>
+        </header>
+        <div class="input-grid">
+          <div class="input-block">
+            <label for="diameter">Diameter <span class="unit">meters</span></label>
+            <input type="range" id="diameter" min="10" max="2000" step="5" value="150" aria-describedby="diameter-tip" />
+            <div class="input-readout"><span id="diameter-val">150</span> m</div>
+            <p class="hint" id="diameter-tip">Typical NEOs: 10–1000 m. Try increasing to simulate a Chicxulub-scale impact.</p>
+          </div>
+          <div class="input-block">
+            <label for="velocity">Velocity <span class="unit">km/s</span></label>
+            <input type="range" id="velocity" min="11" max="75" step="0.1" value="22.5" aria-describedby="velocity-tip" />
+            <div class="input-readout"><span id="velocity-val">22.5</span> km/s</div>
+            <p class="hint" id="velocity-tip">Most Earth-approachers arrive between 11–72 km/s. Add Δv to try a deflection.</p>
+          </div>
+          <div class="input-block">
+            <label for="density">Density <span class="unit">kg/m³</span></label>
+            <input type="range" id="density" min="500" max="8000" step="50" value="3200" aria-describedby="density-tip" />
+            <div class="input-readout"><span id="density-val">3200</span> kg/m³</div>
+            <p class="hint" id="density-tip">Choose between porous comets (~500) and iron asteroids (~8000).</p>
+          </div>
+          <div class="input-block">
+            <label for="delta-v">Deflection Δv <span class="unit">km/s</span></label>
+            <input type="range" id="delta-v" min="0" max="15" step="0.1" value="0" aria-describedby="delta-tip" />
+            <div class="input-readout"><span id="delta-v-val">0</span> km/s</div>
+            <p class="hint" id="delta-tip">Inject delta-v to simulate kinetic impactor or gravity tractor missions.</p>
+          </div>
+        </div>
+        <div class="location-picker">
+          <p>Impact Location: <span id="impact-location">Tap the map</span></p>
+          <button class="secondary" id="reset-location">Reset</button>
+        </div>
+      </article>
+
+      <article class="card stats-panel">
+        <header>
+          <h2>Impact Intelligence</h2>
+          <p class="hint">Output from the Flask simulation engine. NASA data slots right in later.</p>
+        </header>
+        <div class="stat-grid">
+          <div class="stat">
+            <p class="stat-label">Kinetic Energy</p>
+            <p class="stat-value" id="metric-ke">—</p>
+            <p class="stat-foot">Joules</p>
+          </div>
+          <div class="stat">
+            <p class="stat-label">TNT Equivalent</p>
+            <p class="stat-value" id="metric-tnt">—</p>
+            <p class="stat-foot">tons TNT</p>
+          </div>
+          <div class="stat">
+            <p class="stat-label">Crater Diameter</p>
+            <p class="stat-value" id="metric-crater">—</p>
+            <p class="stat-foot">meters</p>
+          </div>
+          <div class="stat">
+            <p class="stat-label">Seismic Magnitude</p>
+            <p class="stat-value" id="metric-seismic">—</p>
+            <p class="stat-foot">Mw</p>
+          </div>
+        </div>
+        <div class="insights">
+          <div class="severity">
+            <p class="section-label">Severity Meter</p>
+            <div class="severity-meter" id="severity-meter">
+              <div class="severity-fill" id="severity-fill"></div>
+            </div>
+            <p class="hint" id="severity-detail">Adjust parameters to generate insights.</p>
+          </div>
+          <div class="timeline">
+            <p class="section-label">Response Timeline</p>
+            <ul id="response-timeline">
+              <li>Awaiting simulation...</li>
+            </ul>
+          </div>
+        </div>
+        <canvas id="impact-chart" height="180"></canvas>
+      </article>
+
+      <aside class="card briefing-panel">
+        <header>
+          <h2>Mission Control Notes</h2>
+        </header>
+        <ul class="notes" id="mission-notes">
+          <li>Assign a landing pad for kinetic impactor follow-up.</li>
+          <li>Cross-check regional DEM before rendering crater overlays.</li>
+          <li>Queue NASA NeoWs API key in <code>app.py</code> before the live window.</li>
+        </ul>
+        <button class="ghost" id="save-note">Add Mission Note</button>
+      </aside>
+    </section>
+
+    <section class="visual-section" id="visualizations">
+      <header class="section-header">
+        <h2>Visualization Hub</h2>
+        <p>Monitor orbital dynamics and ground impact footprints in tandem.</p>
+      </header>
+      <div class="visual-grid">
+        <div class="visual-card" id="orbit-card">
+          <h3>3D Orbit Sandbox</h3>
+          <div id="orbit-stage"></div>
+          <p class="hint">Orbit colors flip when deflection succeeds. NASA tracking data will stream in later.</p>
+        </div>
+        <div class="visual-card" id="map-card">
+          <h3>Impact Footprint Map</h3>
+          <div id="impact-map"></div>
+          <div class="map-legend">
+            <span class="legend-dot crater"></span> Crater estimate
+            <span class="legend-dot city"></span> Population center
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mission-control" id="mission-control">
+      <header class="section-header">
+        <h2>Defend Earth Mission Desk</h2>
+        <p>Pick a mitigation tactic and compute readiness instantly.</p>
+      </header>
+      <div class="mission-grid">
+        <form class="card mission-form" id="mission-form">
+          <h3>Plan a Deflection</h3>
+          <label for="strategy">Strategy</label>
+          <select id="strategy" required>
+            <option value="kinetic">Kinetic Impactor</option>
+            <option value="gravity">Gravity Tractor</option>
+            <option value="nuclear">Standoff Nuclear</option>
+            <option value="laser">Solar Laser Array</option>
+          </select>
+          <label for="lead-time">Lead Time <span class="unit">days</span></label>
+          <input type="number" id="lead-time" min="1" max="720" value="180" />
+          <label for="mission-budget">Mission Budget <span class="unit">$B USD</span></label>
+          <input type="number" id="mission-budget" min="1" max="500" value="35" />
+          <button type="submit" class="primary">Generate Mission Brief</button>
+          <p class="hint">Results sync with the parameter deck and severity meter.</p>
+        </form>
+        <div class="card mission-output">
+          <h3>Mission Brief</h3>
+          <div id="mission-brief">
+            <p>Awaiting mission parameters...</p>
+          </div>
+          <button class="secondary" id="defend-btn">Activate Defend Earth Mode</button>
+          <div class="defend-status" id="defend-result"></div>
+        </div>
+        <div class="card scenario-vault" id="scenario-vault">
+          <h3>Scenario Vault</h3>
+          <p class="hint">Saved simulations help iterate strategies fast.</p>
+          <ul id="scenario-list">
+            <li>No scenarios saved yet.</li>
+          </ul>
+          <button class="ghost" id="clear-scenarios">Clear Vault</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="intel" id="knowledge">
+      <header class="section-header">
+        <h2>Intel Hub</h2>
+        <p>Explore the physics powering every decision.</p>
+      </header>
+      <div class="intel-grid">
+        <article class="intel-card">
+          <h3>Impact Energy</h3>
+          <p>The simulator converts asteroid mass and velocity into kinetic energy using <code>E = 1/2 m v^2</code>, then maps it to TNT yield for intuitive comparisons.</p>
+        </article>
+        <article class="intel-card">
+          <h3>Crater Modelling</h3>
+          <p>A power-law scaling estimates transient crater size. Swap in high-resolution DEM tiles to engrave realistic footprints.</p>
+        </article>
+        <article class="intel-card">
+          <h3>Seismic Shock</h3>
+          <p>Seismic magnitude calculations approximate global shaking via energy release — great for communicating secondary hazards.</p>
+        </article>
+        <article class="intel-card">
+          <h3>Deflection Playbook</h3>
+          <p>Compare kinetic impactor, tractor, nuclear, and laser concepts with instant delta-v requirements and lead time guidance.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div>
+      <strong>Meteor Madness Mission Control</strong>
+      <p>Built with grit by Team Syntax for NASA Space Apps 2025.</p>
     </div>
-    <div class="game-mode">
-      <h2>Defend Earth Mode <span class="tooltip" title="Try to deflect the asteroid! Set Δv and time before impact. Orbit will update (mocked).">?</span></h2>
-      <label>Time Before Impact (days): <input type="number" id="time-before-impact" min="1" max="365" value="30" /></label>
-      <button class="defend-btn" onclick="defendEarth()">Simulate Deflection</button>
-      <div id="defend-result"></div>
+    <div class="footer-links">
+      <a href="#mission">Back to top</a>
+      <a href="https://www.nasa.gov" target="_blank" rel="noopener">NASA.gov</a>
+      <a href="https://api.nasa.gov/" target="_blank" rel="noopener">NeoWs API</a>
     </div>
-    <h2>3D Orbit Visualization</h2>
-    <div id="threejs-canvas"></div>
-    <h2>2D Impact Map</h2>
-    <div id="map"></div>
-  </div>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
   <script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
-    // --- UI State ---
-    let impactLat = null, impactLng = null;
-    function updateSlider(id, valId) {
-      const el = document.getElementById(id);
-      const val = document.getElementById(valId);
-      el.addEventListener('input', () => { val.textContent = el.value; simulate(); });
-      val.textContent = el.value;
-    }
-    updateSlider('diameter', 'diameter-val');
-    updateSlider('velocity', 'velocity-val');
-    updateSlider('density', 'density-val');
-    updateSlider('delta-v', 'delta-v-val');
-    document.getElementById('diameter').addEventListener('change', simulate);
-    document.getElementById('velocity').addEventListener('change', simulate);
-    document.getElementById('density').addEventListener('change', simulate);
-    document.getElementById('delta-v').addEventListener('change', simulate);
+    const API_BASE = 'http://localhost:5000';
+    const state = {
+      impactLat: null,
+      impactLng: null,
+      craterCircle: null,
+      map: null,
+      orbit: null,
+      asteroidMesh: null,
+      chart: null,
+      scenarios: [],
+      countdownTarget: Date.now() + (48 * 60 * 60 * 1000),
+      lastReadiness: 98.6
+    };
 
-    // --- Impact Simulation ---
-    async function simulate() {
-      const diameter = +document.getElementById('diameter').value;
-      const velocity = +document.getElementById('velocity').value;
-      const density = +document.getElementById('density').value;
-      const delta_v = +document.getElementById('delta-v').value;
-      const res = await fetch('http://localhost:5000/simulate-impact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ diameter, velocity, density, delta_v })
-      });
-      const data = await res.json();
-      document.getElementById('ke').textContent = data.kinetic_energy_j.toExponential(3);
-      document.getElementById('tnt').textContent = data.tnt_equivalent_tons.toLocaleString(undefined, { maximumFractionDigits: 0 });
-      document.getElementById('crater').textContent = data.crater_diameter_m.toFixed(1);
-      document.getElementById('seismic').textContent = data.seismic_magnitude_mw.toFixed(2);
-      updateCraterOnMap(data.crater_diameter_m);
-    }
-    simulate();
+    const sliderConfig = [
+      { id: 'diameter', valueId: 'diameter-val', unit: 'm' },
+      { id: 'velocity', valueId: 'velocity-val', unit: 'km/s' },
+      { id: 'density', valueId: 'density-val', unit: 'kg/m³' },
+      { id: 'delta-v', valueId: 'delta-v-val', unit: 'km/s' }
+    ];
 
-    // --- 2D Map (Leaflet) ---
-    const map = L.map('map').setView([20, 0], 2);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 8,
-      attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
-    let craterCircle = null;
-    map.on('click', function(e) {
-      impactLat = e.latlng.lat;
-      impactLng = e.latlng.lng;
-      document.getElementById('impact-location').textContent = `${impactLat.toFixed(2)}, ${impactLng.toFixed(2)}`;
-      updateCraterOnMap();
+    const severityLevels = [
+      { threshold: 1e3, label: 'Regional', tagline: 'City-scale blast — activate civil defense.', color: '#3ddab4' },
+      { threshold: 1e5, label: 'Continental', tagline: 'Continental impact — coordinate multi-nation response.', color: '#ffb347' },
+      { threshold: 1e7, label: 'Global', tagline: 'Global catastrophe — launch planetary-scale mitigation.', color: '#ff6b6b' },
+      { threshold: Infinity, label: 'Extinction-Level', tagline: 'Survival-level event. Deploy every asset.', color: '#ff2e63' }
+    ];
+
+    document.getElementById('hero-run').addEventListener('click', simulate);
+    document.getElementById('hero-save').addEventListener('click', saveScenario);
+    document.getElementById('save-note').addEventListener('click', addMissionNote);
+    document.getElementById('cta-brief').addEventListener('click', () => showToast('Mission brief download queued. Attach NASA NeoWs data post-release.'));
+    document.getElementById('reset-location').addEventListener('click', () => {
+      state.impactLat = null;
+      state.impactLng = null;
+      if (state.craterCircle) {
+        state.map.removeLayer(state.craterCircle);
+        state.craterCircle = null;
+      }
+      document.getElementById('impact-location').textContent = 'Tap the map';
     });
+    document.getElementById('clear-scenarios').addEventListener('click', () => {
+      state.scenarios = [];
+      renderScenarioVault();
+      showToast('Scenario vault cleared.');
+    });
+
+    document.getElementById('mission-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const strategy = document.getElementById('strategy').value;
+      const lead = Number(document.getElementById('lead-time').value);
+      const budget = Number(document.getElementById('mission-budget').value);
+      const deltaV = Number(document.getElementById('delta-v').value);
+      const diameter = Number(document.getElementById('diameter').value);
+      const velocity = Number(document.getElementById('velocity').value);
+      const recommendation = buildMissionBrief({ strategy, lead, budget, deltaV, diameter, velocity });
+      document.getElementById('mission-brief').innerHTML = recommendation;
+      showToast('Mission brief updated — align teams and execute.');
+    });
+
+    document.getElementById('defend-btn').addEventListener('click', defendEarth);
+    document.getElementById('load-neo').addEventListener('click', loadSampleNeo);
+
+    sliderConfig.forEach(({ id, valueId }) => {
+      const input = document.getElementById(id);
+      const valueEl = document.getElementById(valueId);
+      const update = () => {
+        valueEl.textContent = input.value;
+        simulate();
+      };
+      input.addEventListener('input', update);
+      valueEl.textContent = input.value;
+    });
+
+    async function loadSampleNeo() {
+      try {
+        const response = await fetch('../static/sample_asteroid.json');
+        const neo = await response.json();
+        document.getElementById('neo-name').textContent = `${neo.name} (${neo.id})`;
+        document.getElementById('neo-facts').innerHTML = `
+          <li>Diameter: ${neo.estimated_diameter_m} m</li>
+          <li>Velocity: ${neo.velocity_kms} km/s</li>
+          <li>Close Approach: ${neo.close_approach_date}</li>
+        `;
+      } catch (error) {
+        document.getElementById('neo-name').textContent = 'Sample data unavailable';
+        document.getElementById('neo-facts').innerHTML = '<li>Check static/sample_asteroid.json</li>';
+      }
+    }
+
+    async function simulate() {
+      const payload = {
+        diameter: Number(document.getElementById('diameter').value),
+        velocity: Number(document.getElementById('velocity').value),
+        density: Number(document.getElementById('density').value),
+        delta_v: Number(document.getElementById('delta-v').value)
+      };
+      try {
+        const res = await fetch(`${API_BASE}/simulate-impact`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        updateStats(data);
+        const report = updateSeverity(data);
+        updateChart(data);
+        updateTimeline(data);
+        refreshLeaderboard(report.readiness);
+        updateCraterOnMap(data.crater_diameter_m);
+      } catch (error) {
+        showToast('Simulation API unreachable. Ensure Flask backend is running.', true);
+      }
+    }
+
+    function updateStats(data) {
+      document.getElementById('metric-ke').textContent = Number(data.kinetic_energy_j).toExponential(3);
+      document.getElementById('metric-tnt').textContent = Math.round(data.tnt_equivalent_tons).toLocaleString();
+      document.getElementById('metric-crater').textContent = data.crater_diameter_m.toFixed(1);
+      document.getElementById('metric-seismic').textContent = data.seismic_magnitude_mw.toFixed(2);
+    }
+
+    function updateSeverity(data) {
+      const megatons = data.tnt_equivalent_tons / 1e6;
+      const level = severityLevels.find(l => megatons < l.threshold) || severityLevels[severityLevels.length - 1];
+      const ratio = Math.min(1, megatons / severityLevels[severityLevels.length - 1].threshold);
+      document.getElementById('severity-label').textContent = level.label;
+      document.getElementById('severity-tagline').textContent = level.tagline;
+      document.getElementById('severity-fill').style.background = `linear-gradient(90deg, ${level.color}, #1b2735)`;
+      document.getElementById('severity-fill').style.width = `${Math.max(10, ratio * 100)}%`;
+      document.getElementById('severity-detail').textContent = `${megatons.toFixed(2)} megatons TNT — compare to the 1883 Krakatoa eruption (~200 MT).`;
+      document.getElementById('confidence-meter').style.width = `${Math.min(100, 20 + (ratio * 80))}%`;
+      const readiness = Math.max(62, 100 - (ratio * 55) - (Number(document.getElementById('delta-v').value) * 1.5));
+      document.getElementById('confidence-copy').textContent = readiness > 80 ? 'Mission posture strong — keep iterating optimizations.' : 'High-stakes scenario — coordinate international assets.';
+      state.lastReadiness = readiness;
+      return { megatons, ratio, level, readiness };
+    }
+
+    function updateTimeline(data) {
+      const megatons = data.tnt_equivalent_tons / 1e6;
+      const deltaV = Number(document.getElementById('delta-v').value);
+      const leadDays = Number(document.getElementById('lead-time').value);
+      const leadHours = Math.max(6, Math.round(leadDays * 24));
+      const timeline = document.getElementById('response-timeline');
+      const steps = [
+        `T-48h: Finalize global messaging. ${megatons < 5 ? 'Regional' : 'Planetary'} response on standby.`,
+        `T-${leadHours}h: Execute ${deltaV > 0 ? 'deflection burn' : 'coordinated evacuation drills'} and deploy sensor grid.`,
+        `T-6h: Redirect observation assets to confirm trajectory shift.`,
+        megatons > 100 ? 'T-1h: Initiate global shelter protocols and emergency broadcasting.' : 'T-1h: Activate local emergency services and hospitals.'
+      ];
+      timeline.innerHTML = steps.map(step => `<li>${step}</li>`).join('');
+    }
+
+    function updateChart(data) {
+      const ctx = document.getElementById('impact-chart').getContext('2d');
+      if (!state.chart) {
+        state.chart = new Chart(ctx, {
+          type: 'radar',
+          data: {
+            labels: ['Kinetic Energy', 'Crater Size', 'Seismic Shock', 'Deflection Opportunity', 'Population Risk'],
+            datasets: [{
+              label: 'Scenario Severity',
+              data: [0, 0, 0, 0, 0],
+              backgroundColor: 'rgba(255, 109, 132, 0.3)',
+              borderColor: '#ff6d84'
+            }]
+          },
+          options: {
+            scales: {
+              r: {
+                suggestedMin: 0,
+                suggestedMax: 100,
+                grid: { color: 'rgba(255,255,255,0.1)' },
+                angleLines: { color: 'rgba(255,255,255,0.15)' },
+                pointLabels: { color: '#fff', font: { family: 'Inter' } }
+              }
+            },
+            plugins: {
+              legend: { display: false }
+            }
+          }
+        });
+      }
+      const megatons = data.tnt_equivalent_tons / 1e6;
+      const severityScore = Math.min(100, megatons * 5);
+      const craterScore = Math.min(100, data.crater_diameter_m / 20);
+      const seismicScore = Math.min(100, (data.seismic_magnitude_mw / 10) * 100);
+      const deflectionScore = 100 - Math.min(100, Number(document.getElementById('delta-v').value) * 6);
+      const populationRisk = state.impactLat === null ? 40 : Math.min(100, Math.abs(state.impactLat) < 30 ? 90 : 60);
+      state.chart.data.datasets[0].data = [severityScore, craterScore, seismicScore, deflectionScore, populationRisk];
+      state.chart.update();
+    }
+
     function updateCraterOnMap(craterDiam) {
-      if (impactLat === null || impactLng === null) return;
-      if (craterCircle) map.removeLayer(craterCircle);
-      // Convert crater diameter (m) to degrees (approx, for demo)
-      const deg = (craterDiam || 1000) / 111320;
-      craterCircle = L.circle([impactLat, impactLng], { radius: deg * 111320, color: '#ffd700', fillOpacity: 0.3 }).addTo(map);
+      if (state.impactLat === null || state.impactLng === null) return;
+      if (state.craterCircle) {
+        state.map.removeLayer(state.craterCircle);
+      }
+      const radius = (craterDiam || 1000) / 2;
+      state.craterCircle = L.circle([state.impactLat, state.impactLng], {
+        radius,
+        color: '#ffd166',
+        fillColor: '#ffd166',
+        fillOpacity: 0.25
+      }).addTo(state.map);
     }
 
-    // --- 3D Orbit Visualization (Three.js) ---
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(60, 1.8, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(document.getElementById('threejs-canvas').clientWidth, 350);
-    document.getElementById('threejs-canvas').appendChild(renderer.domElement);
-    // Earth
-    const earthGeo = new THREE.SphereGeometry(1, 32, 32);
-    const earthMat = new THREE.MeshPhongMaterial({ color: 0x2266ff, emissive: 0x112244 });
-    const earth = new THREE.Mesh(earthGeo, earthMat);
-    scene.add(earth);
-    // Asteroid orbit (mock ellipse)
-    const curve = new THREE.EllipseCurve(0, 0, 2.5, 1.5, 0, 2 * Math.PI, false, 0);
-    const points = curve.getPoints(100).map(p => new THREE.Vector3(p.x, 0, p.y));
-    const orbitGeo = new THREE.BufferGeometry().setFromPoints(points);
-    const orbitMat = new THREE.LineBasicMaterial({ color: 0xffd700 });
-    const orbit = new THREE.Line(orbitGeo, orbitMat);
-    scene.add(orbit);
-    // Asteroid (mock position)
-    const asteroidGeo = new THREE.SphereGeometry(0.1, 16, 16);
-    const asteroidMat = new THREE.MeshPhongMaterial({ color: 0xffd700 });
-    const asteroid = new THREE.Mesh(asteroidGeo, asteroidMat);
-    asteroid.position.set(2.5, 0, 0);
-    scene.add(asteroid);
-    // Lighting
-    const light = new THREE.PointLight(0xffffff, 1, 100);
-    light.position.set(5, 5, 5);
-    scene.add(light);
-    camera.position.set(0, 2, 6);
-    function animate() {
-      asteroid.position.x = 2.5 * Math.cos(Date.now() * 0.0002);
-      asteroid.position.z = 1.5 * Math.sin(Date.now() * 0.0002);
-      renderer.render(scene, camera);
-      requestAnimationFrame(animate);
+    function buildMissionBrief({ strategy, lead, budget, deltaV, diameter, velocity }) {
+      const strategyCopy = {
+        kinetic: 'Kinetic impactor mission with autonomous targeting and twin impactors for redundancy.',
+        gravity: 'Long-duration gravity tractor to nudge velocity through sustained pull.',
+        nuclear: 'Standoff nuclear detonation to ablate the surface and impart momentum.',
+        laser: 'Solar-pumped laser array delivering gradual momentum change.'
+      };
+      const recommendedDeltaV = Math.max(0.1, (diameter / 300) * (velocity / 25) / (lead / 90));
+      const budgetSignal = budget > 100 ? 'large-scale' : budget > 40 ? 'robust' : 'lean yet focused';
+      return `
+        <p><strong>Strategy:</strong> ${strategyCopy[strategy]}</p>
+        <p><strong>Recommended Δv:</strong> ${recommendedDeltaV.toFixed(2)} km/s (current plan: ${deltaV.toFixed(2)} km/s)</p>
+        <p><strong>Lead Time:</strong> ${lead} days — keep cadence with mission rehearsal campaigns.</p>
+        <p><strong>Budget Outlook:</strong> ${budgetSignal} allocation primed for international co-funding.</p>
+        <p><strong>Action Items:</strong> sync navigation team, confirm launch window, and broadcast BRR (Blue Ribbon Review) briefing.</p>
+      `;
     }
-    animate();
 
-    // --- Defend Earth Mode (Mock) ---
     function defendEarth() {
-      const delta_v = +document.getElementById('delta-v').value;
-      const tbi = +document.getElementById('time-before-impact').value;
-      // Mock: Show new orbit (just change color)
-      orbit.material.color.set(delta_v > 0 ? 0x00ff00 : 0xffd700);
-      document.getElementById('defend-result').textContent = delta_v > 0 ?
-        `Deflection applied! Asteroid path altered (mocked).` :
-        `No deflection. Asteroid remains on collision course.`;
+      const deltaV = Number(document.getElementById('delta-v').value);
+      if (!state.orbit) return;
+      const success = deltaV >= 1.5;
+      state.orbit.material.color.set(success ? 0x3ddab4 : 0xff6d84);
+      document.getElementById('defend-result').textContent = success ? 'Deflection nominal! Orbital solution indicates safe miss distance.' : 'Δv insufficient. Iterate mission plan and escalate countermeasures.';
+      showToast(success ? 'Orbit diverted — Earth is safe (for now)!' : 'Need more thrust. Boost Δv or swap tactics.');
     }
+
+    function saveScenario() {
+      const location = state.impactLat === null ? 'Unassigned' : `${state.impactLat.toFixed(2)}, ${state.impactLng.toFixed(2)}`;
+      const scenario = {
+        timestamp: new Date().toLocaleTimeString(),
+        diameter: document.getElementById('diameter').value,
+        velocity: document.getElementById('velocity').value,
+        severity: document.getElementById('severity-label').textContent,
+        readiness: state.lastReadiness.toFixed(1),
+        location
+      };
+      if (state.scenarios.length >= 5) {
+        state.scenarios.shift();
+      }
+      state.scenarios.push(scenario);
+      renderScenarioVault();
+      refreshLeaderboard(state.lastReadiness + 0.4);
+      showToast('Scenario saved to vault. Leaderboard recalibrated.');
+    }
+
+    function renderScenarioVault() {
+      const list = document.getElementById('scenario-list');
+      if (!state.scenarios.length) {
+        list.innerHTML = '<li>No scenarios saved yet.</li>';
+        return;
+      }
+      list.innerHTML = state.scenarios.map(s => `
+        <li>
+          <strong>${s.severity}</strong> • ${s.diameter} m @ ${s.velocity} km/s
+          <span class="timestamp">${s.location} • readiness ${s.readiness}% • saved ${s.timestamp}</span>
+        </li>
+      `).join('');
+    }
+
+    function refreshLeaderboard(readinessScore) {
+      if (Number.isFinite(readinessScore)) {
+        state.lastReadiness = readinessScore;
+      }
+      const board = document.getElementById('leaderboard');
+      const top = board.querySelector('li');
+      if (top) {
+        top.innerHTML = `<strong>Team Syntax</strong> — ${state.lastReadiness.toFixed(1)}% mission readiness`;
+      }
+    }
+
+    function addMissionNote() {
+      const promptText = prompt('Add a mission control note for teammates:');
+      if (!promptText) return;
+      const notes = document.getElementById('mission-notes');
+      const li = document.createElement('li');
+      li.textContent = promptText;
+      notes.appendChild(li);
+      showToast('Mission note added.');
+    }
+
+    function showToast(message, danger = false) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.toggle('danger', danger);
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3200);
+    }
+
+    function initCountdown() {
+      const el = document.getElementById('hackathon-countdown');
+      const update = () => {
+        const remaining = Math.max(0, state.countdownTarget - Date.now());
+        const hours = Math.floor(remaining / (1000 * 60 * 60));
+        const mins = Math.floor((remaining / (1000 * 60)) % 60);
+        el.textContent = `${hours.toString().padStart(2, '0')}h ${mins.toString().padStart(2, '0')}m`;
+      };
+      update();
+      setInterval(() => {
+        update();
+      }, 60 * 1000);
+    }
+
+    function initMap() {
+      state.map = L.map('impact-map', {
+        worldCopyJump: true,
+        minZoom: 2,
+        maxZoom: 8
+      }).setView([20, 0], 2);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(state.map);
+      const cities = [
+        { name: 'New York', coords: [40.7128, -74.0060] },
+        { name: 'Tokyo', coords: [35.6762, 139.6503] },
+        { name: 'Nairobi', coords: [-1.2921, 36.8219] },
+        { name: 'Brasília', coords: [-15.8267, -47.9218] }
+      ];
+      cities.forEach(city => {
+        L.circleMarker(city.coords, { radius: 4, color: '#06d6a0', fillColor: '#06d6a0', fillOpacity: 0.8 })
+          .addTo(state.map)
+          .bindPopup(city.name);
+      });
+      state.map.on('click', (event) => {
+        state.impactLat = event.latlng.lat;
+        state.impactLng = event.latlng.lng;
+        document.getElementById('impact-location').textContent = `${state.impactLat.toFixed(2)}, ${state.impactLng.toFixed(2)}`;
+        simulate();
+      });
+    }
+
+    function initOrbit() {
+      const stage = document.getElementById('orbit-stage');
+      const width = stage.clientWidth;
+      const height = 420;
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(65, width / height, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(width, height);
+      stage.appendChild(renderer.domElement);
+
+      const earth = new THREE.Mesh(
+        new THREE.SphereGeometry(1, 32, 32),
+        new THREE.MeshPhongMaterial({ color: 0x274690, emissive: 0x0b1d51 })
+      );
+      scene.add(earth);
+
+      const curve = new THREE.EllipseCurve(0, 0, 3, 1.8, 0, 2 * Math.PI, false, 0);
+      const points = curve.getPoints(180).map(p => new THREE.Vector3(p.x, 0, p.y));
+      const orbitGeometry = new THREE.BufferGeometry().setFromPoints(points);
+      const orbitMaterial = new THREE.LineDashedMaterial({ color: 0xffd166, dashSize: 0.2, gapSize: 0.05 });
+      const orbit = new THREE.Line(orbitGeometry, orbitMaterial);
+      orbit.computeLineDistances();
+      scene.add(orbit);
+
+      const asteroid = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.12, 1),
+        new THREE.MeshStandardMaterial({ color: 0xff6d84, metalness: 0.2, roughness: 0.6 })
+      );
+      asteroid.position.set(3, 0, 0);
+      scene.add(asteroid);
+
+      const light = new THREE.PointLight(0xffffff, 2, 100);
+      light.position.set(6, 6, 6);
+      scene.add(light);
+      scene.add(new THREE.AmbientLight(0x404040));
+
+      camera.position.set(0, 3, 7);
+
+      state.orbit = orbit;
+      state.asteroidMesh = asteroid;
+
+      function animate() {
+        requestAnimationFrame(animate);
+        const time = Date.now() * 0.00025;
+        asteroid.position.x = 3 * Math.cos(time);
+        asteroid.position.z = 1.8 * Math.sin(time);
+        asteroid.rotation.y += 0.01;
+        renderer.render(scene, camera);
+      }
+      animate();
+    }
+
+    function init() {
+      initCountdown();
+      initMap();
+      initOrbit();
+      loadSampleNeo();
+      renderScenarioVault();
+      simulate();
+    }
+
+    window.addEventListener('load', init);
   </script>
 </body>
 </html>
