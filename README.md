@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://media.giphy.com/media/xT0xeJpnrWC4XWblEk/giphy.gif" alt="Meteor Madness Banner" width="800"/>
+</p>
+
 # Meteor Madness - NASA Space Apps Hackathon
 
 ## Overview
