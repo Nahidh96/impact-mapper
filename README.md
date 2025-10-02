@@ -1,6 +1,10 @@
 <p align="center">
-  <img src="https://media.giphy.com/media/xT0xeJpnrWC4XWblEk/giphy.gif" alt="Meteor Madness Banner" width="800"/>
+  <img src="https://img.shields.io/badge/NASA%20Space%20Apps-2025-blue?style=for-the-badge&logo=nasa" />
+  <img src="https://img.shields.io/badge/Mission-Meteor%20Madness-orange?style=for-the-badge&logo=meteor" />
+  <img src="https://img.shields.io/badge/Team-Syntaxx-green?style=for-the-badge&logo=rocket" />
 </p>
+
+# 🚀 Meteor Madness - NASA Space Apps Hackathon
 
 # Meteor Madness - NASA Space Apps Hackathon
 
