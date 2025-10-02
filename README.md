@@ -20,7 +20,8 @@ Meteor Madness is a mission-control style experience for the 2025 NASA Space App
 D:\Projects\nasaspaceapp\.venv\Scripts\python.exe app.py
 ```
 Open a another terminal and enter:
-```D:\Projects\nasaspaceapp\.venv\Scripts\python.exe -m http.server 8000```
+```D:\Projects\nasaspaceapp\.venv\Scripts\python.exe -m http.server 8000
+```
 
 ### Backend (Flask)
 ```powershell
