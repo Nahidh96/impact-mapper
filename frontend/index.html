@@ -56,15 +56,23 @@
       </div>
       <aside class="hero-side">
         <div class="briefing-card">
-          <h3>Latest NASA Mock NEO</h3>
+          <h3>NEO Intelligence Feed</h3>
+          <form class="neo-query" id="neo-query">
+            <label for="neo-id-input">NASA NeoWs ID</label>
+            <div class="neo-input-row">
+              <input type="text" id="neo-id-input" name="neoId" value="3542519" placeholder="e.g. 3542519" autocomplete="off" />
+              <button class="secondary" id="load-neo" type="submit">Fetch NEO</button>
+            </div>
+            <p class="hint">Try famous objects like 3542519 (Apophis), 433 (Eros), or 101955 (Bennu).</p>
+          </form>
+          <button class="ghost neo-reset" type="button" id="load-mock-neo">Use Hackathon Mock</button>
           <p class="neo-name" id="neo-name">Loading...</p>
           <ul class="neo-facts" id="neo-facts">
             <li>Diameter: —</li>
             <li>Velocity: —</li>
             <li>Close Approach: —</li>
           </ul>
-          <button class="secondary" id="load-neo">Refresh Sample NEO</button>
-          <p class="neo-note">Real feed slots in automatically during the Space Apps window.</p>
+          <p class="neo-status" id="neo-status">Awaiting NASA feed…</p>
         </div>
         <div class="scorecard">
           <h3>Global Defense Leaderboard</h3>
@@ -181,10 +189,33 @@
         <p>Monitor orbital dynamics and ground impact footprints in tandem.</p>
       </header>
       <div class="visual-grid">
-        <div class="visual-card" id="orbit-card">
-          <h3>3D Orbit Sandbox</h3>
-          <div id="orbit-stage"></div>
-          <p class="hint">Orbit colors flip when deflection succeeds. NASA tracking data will stream in later.</p>
+        <div class="visual-card orbit-card" id="orbit-card">
+          <div class="orbit-header">
+            <h3>3D Orbit Sandbox</h3>
+            <span class="orbit-source" id="orbit-source">Mock Orbit</span>
+          </div>
+          <div class="orbit-stage-wrapper">
+            <div id="orbit-stage"></div>
+            <div class="orbit-overlay" id="orbit-overlay">
+              <div class="orbit-metric">
+                <span>Orbital Period</span>
+                <strong id="orbit-period">—</strong>
+              </div>
+              <div class="orbit-metric">
+                <span>Eccentricity</span>
+                <strong id="orbit-eccentricity">—</strong>
+              </div>
+              <div class="orbit-metric">
+                <span>Inclination</span>
+                <strong id="orbit-inclination">—</strong>
+              </div>
+              <div class="orbit-metric">
+                <span>Δv Plan</span>
+                <strong id="orbit-delta">0.0 km/s</strong>
+              </div>
+            </div>
+          </div>
+          <p class="hint">Pan and zoom to inspect the trajectory. Δv adjustments reshape the orbit live.</p>
         </div>
         <div class="visual-card" id="map-card">
           <h3>Impact Footprint Map</h3>
@@ -267,7 +298,7 @@
   <footer class="footer">
     <div>
       <strong>Meteor Madness Mission Control</strong>
-      <p>Built with grit by Team Syntax for NASA Space Apps 2025.</p>
+      <p>Built with cosmic grit by Team Syntaxx for NASA Space Apps 2025.</p>
     </div>
     <div class="footer-links">
       <a href="#mission">Back to top</a>
@@ -283,6 +314,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
     const API_BASE = 'http://localhost:5000';
+    const DEFAULT_NEO_ID = '3542519';
     const state = {
       impactLat: null,
       impactLng: null,
@@ -290,10 +322,36 @@
       map: null,
       orbit: null,
       asteroidMesh: null,
+      orbitGroup: null,
+      orbitScene: null,
+      orbitCamera: null,
+      orbitRenderer: null,
+      orbitControls: null,
+      orbitControlState: {
+        azimuth: Math.PI / 3,
+        polar: Math.PI / 3,
+        distance: 8
+      },
+      orbitTrail: null,
+      baseOrbitParams: {
+        semiMajor: 3,
+        semiMinor: 1.8,
+        inclination: 0,
+        ascendingNode: 0,
+        periodDays: 365
+      },
+      orbitParams: {
+        semiMajor: 3,
+        semiMinor: 1.8,
+        inclination: 0,
+        ascendingNode: 0,
+        periodDays: 365
+      },
       chart: null,
       scenarios: [],
       countdownTarget: Date.now() + (48 * 60 * 60 * 1000),
-      lastReadiness: 98.6
+      lastReadiness: 98.6,
+      currentNeo: null
     };
 
     const sliderConfig = [
@@ -342,8 +400,9 @@
       showToast('Mission brief updated — align teams and execute.');
     });
 
-    document.getElementById('defend-btn').addEventListener('click', defendEarth);
-    document.getElementById('load-neo').addEventListener('click', loadSampleNeo);
+  document.getElementById('defend-btn').addEventListener('click', defendEarth);
+  document.getElementById('neo-query').addEventListener('submit', loadSampleNeo);
+  document.getElementById('load-mock-neo').addEventListener('click', loadMockNeo);
 
     sliderConfig.forEach(({ id, valueId }) => {
       const input = document.getElementById(id);
@@ -356,20 +415,172 @@
       valueEl.textContent = input.value;
     });
 
-    async function loadSampleNeo() {
+    async function loadSampleNeo(event) {
+      if (event && typeof event.preventDefault === 'function') {
+        event.preventDefault();
+      }
+      const input = document.getElementById('neo-id-input');
+      const button = document.getElementById('load-neo');
+      const neoId = (input?.value || '').trim() || DEFAULT_NEO_ID;
+
+      setNeoStatus('Querying NASA NeoWs...');
+      if (button) {
+        button.disabled = true;
+        button.textContent = 'Fetching…';
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/neo/${encodeURIComponent(neoId)}`);
+        const neo = await response.json();
+        renderNeo(neo);
+        syncSlidersFromNeo(neo);
+        if (response.ok && neo.source === 'nasa') {
+          showToast(`Loaded ${neo.name || neoId} from NASA NeoWs.`);
+        } else {
+          showToast(neo.message || 'NASA data unavailable. Showing mock payload.', true);
+        }
+      } catch (error) {
+        showToast('Unable to reach NASA NeoWs. Falling back to hackathon mock.', true);
+        await loadMockNeo(true);
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = 'Fetch NEO';
+        }
+      }
+    }
+
+    async function loadMockNeo(silent = false) {
       try {
         const response = await fetch('../static/sample_asteroid.json');
         const neo = await response.json();
-        document.getElementById('neo-name').textContent = `${neo.name} (${neo.id})`;
-        document.getElementById('neo-facts').innerHTML = `
-          <li>Diameter: ${neo.estimated_diameter_m} m</li>
-          <li>Velocity: ${neo.velocity_kms} km/s</li>
-          <li>Close Approach: ${neo.close_approach_date}</li>
-        `;
+        neo.source = 'mock';
+        neo.message = 'Hackathon mock dataset loaded.';
+        neo.requested_id = 'mock';
+        neo.resolved_id = neo.id;
+        renderNeo(neo);
+        syncSlidersFromNeo(neo);
+        if (!silent) {
+          showToast('Loaded hackathon mock asteroid metadata.');
+        }
       } catch (error) {
-        document.getElementById('neo-name').textContent = 'Sample data unavailable';
-        document.getElementById('neo-facts').innerHTML = '<li>Check static/sample_asteroid.json</li>';
+        const fallback = { name: 'Sample data unavailable', id: 'mock', source: 'mock', message: 'Unable to load static/sample_asteroid.json.' };
+        renderNeo(fallback);
+        if (!silent) {
+          showToast('Sample asteroid file missing. Check static/sample_asteroid.json.', true);
+        }
       }
+    }
+
+    function renderNeo(neo) {
+      state.currentNeo = neo;
+      const name = neo.name || 'Unknown NEO';
+      const idLabel = neo.id ? ` (${neo.id})` : '';
+      const factsEl = document.getElementById('neo-facts');
+      const statusEl = document.getElementById('neo-status');
+      const input = document.getElementById('neo-id-input');
+
+      if (input && neo.id) {
+        input.value = neo.id;
+      }
+
+      document.getElementById('neo-name').textContent = `${name}${idLabel}`;
+
+      const facts = [];
+      if (neo.estimated_diameter_min_m && neo.estimated_diameter_max_m) {
+        facts.push(`<li>Diameter: ${formatNumber(neo.estimated_diameter_min_m)}–${formatNumber(neo.estimated_diameter_max_m)} m</li>`);
+      } else if (neo.estimated_diameter_m) {
+        facts.push(`<li>Diameter: ${formatNumber(neo.estimated_diameter_m)} m</li>`);
+      }
+      if (neo.velocity_kms) {
+        facts.push(`<li>Velocity: ${formatNumber(neo.velocity_kms, { maximumFractionDigits: 2 })} km/s</li>`);
+      }
+      if (neo.miss_distance_km) {
+        facts.push(`<li>Miss Distance: ${formatNumber(neo.miss_distance_km / 1000, { maximumFractionDigits: 2 })} Mm</li>`);
+      }
+      if (neo.close_approach_date) {
+        facts.push(`<li>Close Approach: ${neo.close_approach_date}</li>`);
+      }
+      if (typeof neo.potentially_hazardous === 'boolean') {
+        facts.push(`<li>Potentially Hazardous: ${neo.potentially_hazardous ? 'Yes' : 'No'}</li>`);
+      }
+      if (neo.absolute_magnitude_h !== undefined) {
+        facts.push(`<li>Abs Magnitude (H): ${formatNumber(neo.absolute_magnitude_h, { maximumFractionDigits: 2 })}</li>`);
+      }
+
+      factsEl.innerHTML = facts.length ? facts.join('') : '<li>Awaiting additional data…</li>';
+
+      const sourceLabel = neo.source === 'nasa' ? 'Live data from NASA NeoWs.' : 'Hackathon mock dataset in use.';
+      const message = neo.message ? `${neo.message}` : sourceLabel;
+      if (statusEl) {
+        const resolvedNote = neo.resolved_id && neo.resolved_id !== neo.requested_id
+          ? ` Resolved via SPK-ID ${neo.resolved_id}.`
+          : '';
+        statusEl.textContent = `${message}${resolvedNote}`.trim();
+      }
+
+      updateOrbitFromNeo(neo);
+      updateMapFromNeo(neo);
+      updateMissionPlannerFromNeo(neo);
+    }
+
+    function setNeoStatus(message) {
+      const statusEl = document.getElementById('neo-status');
+      if (statusEl) {
+        statusEl.textContent = message;
+      }
+    }
+
+    function formatNumber(value, options = {}) {
+      if (value === null || value === undefined || value === '') {
+        return '—';
+      }
+      const number = Number(value);
+      if (Number.isNaN(number)) {
+        return '—';
+      }
+      const { maximumFractionDigits = 1, minimumFractionDigits = 0 } = options;
+      return number.toLocaleString(undefined, { maximumFractionDigits, minimumFractionDigits });
+    }
+
+    function syncSlidersFromNeo(neo) {
+      if (!neo) return;
+      if (neo.estimated_diameter_m || neo.estimated_diameter_max_m) {
+        const diameter = Math.round(neo.estimated_diameter_m || neo.estimated_diameter_max_m);
+        setSliderValue('diameter', clamp(diameter, 10, 2000));
+      }
+      if (neo.velocity_kms) {
+        setSliderValue('velocity', clamp(Number(neo.velocity_kms), 11, 75).toFixed(1));
+      }
+      if (neo.density_kgm3) {
+        setSliderValue('density', clamp(Math.round(neo.density_kgm3), 500, 8000));
+      }
+      simulate();
+      updateMissionPlannerFromNeo(neo);
+    }
+
+    function setSliderValue(id, value) {
+      const config = sliderConfig.find(cfg => cfg.id === id);
+      const slider = document.getElementById(id);
+      if (!config || !slider) return;
+      let numericValue = value;
+      if (typeof value === 'string') {
+        numericValue = Number(value);
+      }
+      if (Number.isFinite(numericValue)) {
+        slider.value = numericValue;
+      }
+      const displayEl = document.getElementById(config.valueId);
+      const numericDisplay = Number(slider.value);
+      if (Number.isFinite(numericDisplay)) {
+        displayEl.textContent = id === 'velocity' ? numericDisplay.toFixed(1) : Math.round(numericDisplay);
+      } else {
+        displayEl.textContent = slider.value;
+      }
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, Number(value)));
     }
 
     async function simulate() {
@@ -391,6 +602,7 @@
         updateChart(data);
         updateTimeline(data);
         refreshLeaderboard(report.readiness);
+        applyDeltaVToOrbit(payload.delta_v);
         updateCraterOnMap(data.crater_diameter_m);
       } catch (error) {
         showToast('Simulation API unreachable. Ensure Flask backend is running.', true);
@@ -487,6 +699,276 @@
         fillColor: '#ffd166',
         fillOpacity: 0.25
       }).addTo(state.map);
+    }
+
+    function refreshOrbitGeometry() {
+      const params = state.orbitParams || state.baseOrbitParams;
+      const semiMajor = Math.max(0.25, Number(params?.semiMajor) || 3);
+      const semiMinor = Math.max(0.25, Number(params?.semiMinor) || 1.8);
+      const curve = new THREE.EllipseCurve(0, 0, semiMajor, semiMinor, 0, 2 * Math.PI, false, 0);
+      const points = curve.getPoints(240).map(p => new THREE.Vector3(p.x, 0, p.y));
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      if (state.orbit.geometry) {
+        state.orbit.geometry.dispose();
+      }
+      state.orbit.geometry = geometry;
+      state.orbit.computeLineDistances();
+    }
+
+    function applyDeltaVToOrbit(deltaV = 0) {
+      if (!state.orbit) return;
+      const base = state.baseOrbitParams || state.orbitParams;
+      if (!base) return;
+      const dv = Math.max(0, Number(deltaV) || 0);
+      const stretch = 1 + Math.min(0.6, dv * 0.04);
+      const flatten = Math.max(0.55, 1 - dv * 0.035);
+      state.orbitParams = {
+        semiMajor: base.semiMajor * stretch,
+        semiMinor: base.semiMinor * stretch * flatten,
+        inclination: base.inclination + dv * 0.8,
+        ascendingNode: base.ascendingNode,
+        periodDays: base.periodDays * (1 + Math.min(0.6, dv * 0.05))
+      };
+      refreshOrbitGeometry();
+      if (state.orbitGroup) {
+        state.orbitGroup.rotation.set(
+          THREE.MathUtils.degToRad(state.orbitParams.inclination || 0),
+          THREE.MathUtils.degToRad(state.orbitParams.ascendingNode || 0),
+          0
+        );
+      }
+      if (state.orbit.material) {
+        state.orbit.material.color.set(dv >= 1.5 ? 0x3ddab4 : 0xffd166);
+        state.orbit.material.dashSize = dv >= 1.5 ? 0.12 : 0.2;
+        state.orbit.material.gapSize = dv >= 1.5 ? 0.08 : 0.05;
+        state.orbit.material.needsUpdate = true;
+      }
+      if (state.asteroidMesh) {
+        state.asteroidMesh.material.color.set(dv >= 1.5 ? 0x3ddab4 : 0xff6d84);
+      }
+      renderOrbitOverlay(state.currentNeo);
+    }
+
+    function updateOrbitDeltaDisplay(deltaV) {
+      const el = document.getElementById('orbit-delta');
+      if (el) {
+        el.textContent = `${Number(deltaV).toFixed(1)} km/s`;
+      }
+    }
+
+    function renderOrbitOverlay(neo) {
+      const sourceEl = document.getElementById('orbit-source');
+      const live = neo?.source === 'nasa';
+      if (sourceEl) {
+        sourceEl.textContent = live ? 'NASA LIVE' : 'Mock Orbit';
+        sourceEl.classList.toggle('nasa', live);
+      }
+      const orbitParams = state.orbitParams || state.baseOrbitParams;
+      const periodDays = orbitParams?.periodDays;
+      let eccentricity = Number(neo?.orbit?.eccentricity);
+      if (!Number.isFinite(eccentricity) && orbitParams?.semiMajor && orbitParams?.semiMinor) {
+        eccentricity = Math.sqrt(Math.max(0, 1 - Math.pow(orbitParams.semiMinor / orbitParams.semiMajor, 2)));
+      }
+      const inclination = orbitParams?.inclination;
+      setOrbitMetric('orbit-period', periodDays ? `${Math.round(periodDays)} d` : '—');
+      setOrbitMetric('orbit-eccentricity', Number.isFinite(eccentricity) ? eccentricity.toFixed(3) : '—');
+      setOrbitMetric('orbit-inclination', Number.isFinite(inclination) ? `${inclination.toFixed(2)}°` : '—');
+      updateOrbitDeltaDisplay(Number(document.getElementById('delta-v').value || 0));
+    }
+
+    function setOrbitMetric(id, value) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.textContent = value;
+      }
+    }
+
+    function updateOrbitFromNeo(neo) {
+      if (!state.orbit) return;
+      const orbit = neo?.orbit || {};
+      const semiMajorAU = Number(orbit.semi_major_axis_au);
+      const eccentricity = clamp(Number(orbit.eccentricity) || 0, 0, 0.98);
+      const baseScale = 3;
+      const semiMajor = Number.isFinite(semiMajorAU) ? baseScale * semiMajorAU : state.baseOrbitParams.semiMajor;
+      const semiMinor = semiMajor * Math.sqrt(Math.max(0.04, 1 - Math.pow(eccentricity, 2)));
+      let period = Number(orbit.orbital_period_days || orbit.orbital_period);
+      if (!Number.isFinite(period) && Number.isFinite(semiMajorAU)) {
+        period = Math.pow(semiMajorAU, 1.5) * 365.25;
+      }
+      const inclination = Number(orbit.inclination_deg) || 0;
+      const ascending = Number(orbit.ascending_node_longitude_deg) || 0;
+
+      state.baseOrbitParams = {
+        semiMajor,
+        semiMinor,
+        inclination,
+        ascendingNode: ascending,
+        periodDays: Math.max(1, period || state.baseOrbitParams.periodDays)
+      };
+      state.orbitParams = { ...state.baseOrbitParams };
+      refreshOrbitGeometry();
+      if (state.orbitGroup) {
+        state.orbitGroup.rotation.set(
+          THREE.MathUtils.degToRad(state.orbitParams.inclination || 0),
+          THREE.MathUtils.degToRad(state.orbitParams.ascendingNode || 0),
+          0
+        );
+      }
+      renderOrbitOverlay(neo);
+      applyDeltaVToOrbit(Number(document.getElementById('delta-v').value || 0));
+    }
+
+    function updateMapFromNeo(neo) {
+      if (!neo || !state.map) return;
+      if (state.impactLat === null || state.impactLng === null) {
+        const inclination = Number((neo.orbit || {}).inclination_deg) || 0;
+        const ascNode = Number((neo.orbit || {}).ascending_node_longitude_deg) || 0;
+        state.impactLat = Math.max(-60, Math.min(60, inclination / 2 || 12));
+        state.impactLng = ((ascNode % 360) + 540) % 360 - 180;
+        state.map.setView([state.impactLat, state.impactLng], 3);
+        document.getElementById('impact-location').textContent = `${state.impactLat.toFixed(2)}, ${state.impactLng.toFixed(2)} (auto)`;
+      }
+      const crater = Number(neo.estimated_diameter_max_m || neo.estimated_diameter_m);
+      if (Number.isFinite(crater)) {
+        updateCraterOnMap(crater);
+      }
+    }
+
+    function updateMissionPlannerFromNeo(neo) {
+      if (!neo) return;
+      const leadInput = document.getElementById('lead-time');
+      const budgetInput = document.getElementById('mission-budget');
+      const closeApproach = parseNeoDate(neo.close_approach_date);
+      if (leadInput && closeApproach) {
+        const diffDays = Math.max(1, Math.round((closeApproach.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+        leadInput.value = diffDays;
+      }
+      const diameter = Number(document.getElementById('diameter').value);
+      if (budgetInput && Number.isFinite(diameter)) {
+        const suggested = Math.min(400, Math.max(15, Math.round(diameter / 8)));
+        budgetInput.value = suggested;
+      }
+      const strategy = document.getElementById('strategy').value;
+      const lead = Number(document.getElementById('lead-time').value);
+      const budget = Number(document.getElementById('mission-budget').value);
+      const deltaV = Number(document.getElementById('delta-v').value);
+      const velocity = Number(document.getElementById('velocity').value);
+      const brief = buildMissionBrief({ strategy, lead, budget, deltaV, diameter, velocity });
+      document.getElementById('mission-brief').innerHTML = brief;
+    }
+
+    function parseNeoDate(value) {
+      if (!value) return null;
+      const isoCandidate = value.replace(' ', 'T');
+      let parsed = new Date(isoCandidate);
+      if (Number.isNaN(parsed.getTime())) {
+        parsed = new Date(`${isoCandidate}Z`);
+      }
+      if (Number.isNaN(parsed.getTime())) {
+        return null;
+      }
+      return parsed;
+    }
+
+    function handleOrbitResize() {
+      if (!state.orbitRenderer || !state.orbitCamera) return;
+      const stage = document.getElementById('orbit-stage');
+      if (!stage) return;
+      const width = stage.clientWidth || stage.offsetWidth || 620;
+      const height = stage.clientHeight || 420;
+      state.orbitCamera.aspect = width / height;
+      state.orbitCamera.updateProjectionMatrix();
+      state.orbitRenderer.setSize(width, height);
+      updateCameraFromControls();
+    }
+
+    function updateCameraFromControls() {
+      if (!state.orbitCamera || !state.orbitControlState) return;
+      const { azimuth, polar, distance } = state.orbitControlState;
+      const radius = Math.max(2.5, Math.min(16, distance));
+      const polarClamped = Math.max(0.2, Math.min(Math.PI - 0.2, polar));
+      const x = radius * Math.sin(polarClamped) * Math.sin(azimuth);
+      const y = radius * Math.cos(polarClamped);
+      const z = radius * Math.sin(polarClamped) * Math.cos(azimuth);
+      state.orbitCamera.position.set(x, y, z);
+      state.orbitCamera.lookAt(0, 0, 0);
+    }
+
+  function setupOrbitInteractions(canvas) {
+      const controls = state.orbitControlState;
+      const pointer = { active: false, id: null, lastX: 0, lastY: 0 };
+      if (!canvas) return;
+      canvas.style.touchAction = 'none';
+
+      const onPointerDown = (event) => {
+        pointer.active = true;
+        pointer.id = event.pointerId;
+        pointer.lastX = event.clientX;
+        pointer.lastY = event.clientY;
+        canvas.setPointerCapture(event.pointerId);
+      };
+
+      const onPointerMove = (event) => {
+        if (!pointer.active || pointer.id !== event.pointerId) return;
+        const deltaX = event.clientX - pointer.lastX;
+        const deltaY = event.clientY - pointer.lastY;
+        pointer.lastX = event.clientX;
+        pointer.lastY = event.clientY;
+        controls.azimuth -= deltaX * 0.005;
+        controls.polar -= deltaY * 0.0035;
+        updateCameraFromControls();
+      };
+
+      const stopInteraction = (event) => {
+        if (pointer.active && pointer.id === event.pointerId) {
+          canvas.releasePointerCapture(event.pointerId);
+          pointer.active = false;
+          pointer.id = null;
+        }
+      };
+
+      const onWheel = (event) => {
+        event.preventDefault();
+        controls.distance += event.deltaY * 0.0025;
+        controls.distance = Math.max(2.5, Math.min(16, controls.distance));
+        updateCameraFromControls();
+      };
+
+      canvas.addEventListener('pointerdown', onPointerDown);
+      canvas.addEventListener('pointermove', onPointerMove);
+      canvas.addEventListener('pointerup', stopInteraction);
+      canvas.addEventListener('pointerleave', stopInteraction);
+      canvas.addEventListener('pointercancel', stopInteraction);
+      canvas.addEventListener('wheel', onWheel, { passive: false });
+
+      state.orbitControls = {
+        dispose() {
+          canvas.removeEventListener('pointerdown', onPointerDown);
+          canvas.removeEventListener('pointermove', onPointerMove);
+          canvas.removeEventListener('pointerup', stopInteraction);
+          canvas.removeEventListener('pointerleave', stopInteraction);
+          canvas.removeEventListener('pointercancel', stopInteraction);
+          canvas.removeEventListener('wheel', onWheel);
+        }
+      };
+    }
+
+    function buildStarfield(scene) {
+      const starGeometry = new THREE.BufferGeometry();
+      const starCount = 650;
+      const positions = new Float32Array(starCount * 3);
+      for (let i = 0; i < starCount; i += 1) {
+        const radius = 18 + Math.random() * 14;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos((Math.random() * 2) - 1);
+        positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+        positions[i * 3 + 1] = radius * Math.cos(phi) * 0.45;
+        positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+      }
+      starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.06, transparent: true, opacity: 0.8 });
+      const stars = new THREE.Points(starGeometry, starMaterial);
+      scene.add(stars);
     }
 
     function buildMissionBrief({ strategy, lead, budget, deltaV, diameter, velocity }) {
@@ -622,51 +1104,120 @@
 
     function initOrbit() {
       const stage = document.getElementById('orbit-stage');
-      const width = stage.clientWidth;
-      const height = 420;
+      const width = stage.clientWidth || stage.offsetWidth || 620;
+      const height = stage.clientHeight || 420;
+      if (state.orbitControls && typeof state.orbitControls.dispose === 'function') {
+        state.orbitControls.dispose();
+        state.orbitControls = null;
+      }
       const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(65, width / height, 0.1, 1000);
+      const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 200);
+      camera.position.set(0, 3.2, 7.5);
+
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
       renderer.setSize(width, height);
+      stage.innerHTML = '';
       stage.appendChild(renderer.domElement);
 
+      const ambient = new THREE.AmbientLight(0x142338, 0.7);
+      scene.add(ambient);
+      const keyLight = new THREE.PointLight(0xfff2c7, 1.6, 65);
+      keyLight.position.set(6, 7, 5);
+      scene.add(keyLight);
+      const rimLight = new THREE.PointLight(0x6dcff6, 0.75, 80);
+      rimLight.position.set(-8, -5, -6);
+      scene.add(rimLight);
+
+      buildStarfield(scene);
+
+      const sun = new THREE.Mesh(
+        new THREE.SphereGeometry(0.45, 28, 28),
+        new THREE.MeshStandardMaterial({ color: 0xfff4a8, emissive: 0xffe066, emissiveIntensity: 0.9, roughness: 0.2 })
+      );
+      scene.add(sun);
+      const sunGlow = new THREE.Mesh(
+        new THREE.RingGeometry(0.55, 0.85, 64),
+        new THREE.MeshBasicMaterial({ color: 0xfff8d2, transparent: true, opacity: 0.3, side: THREE.DoubleSide })
+      );
+      sunGlow.rotation.x = Math.PI / 2;
+      scene.add(sunGlow);
+
       const earth = new THREE.Mesh(
-        new THREE.SphereGeometry(1, 32, 32),
-        new THREE.MeshPhongMaterial({ color: 0x274690, emissive: 0x0b1d51 })
+        new THREE.SphereGeometry(1, 48, 48),
+        new THREE.MeshStandardMaterial({ color: 0x2f6bff, emissive: 0x12305f, roughness: 0.35, metalness: 0.15 })
       );
       scene.add(earth);
+      const earthGlow = new THREE.Mesh(
+        new THREE.RingGeometry(1.05, 1.3, 90),
+        new THREE.MeshBasicMaterial({ color: 0x4fb7ff, transparent: true, opacity: 0.12, side: THREE.DoubleSide })
+      );
+      earthGlow.rotation.x = Math.PI / 2;
+      scene.add(earthGlow);
 
-      const curve = new THREE.EllipseCurve(0, 0, 3, 1.8, 0, 2 * Math.PI, false, 0);
-      const points = curve.getPoints(180).map(p => new THREE.Vector3(p.x, 0, p.y));
-      const orbitGeometry = new THREE.BufferGeometry().setFromPoints(points);
       const orbitMaterial = new THREE.LineDashedMaterial({ color: 0xffd166, dashSize: 0.2, gapSize: 0.05 });
-      const orbit = new THREE.Line(orbitGeometry, orbitMaterial);
-      orbit.computeLineDistances();
-      scene.add(orbit);
+      const orbit = new THREE.Line(new THREE.BufferGeometry(), orbitMaterial);
 
       const asteroid = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(0.12, 1),
-        new THREE.MeshStandardMaterial({ color: 0xff6d84, metalness: 0.2, roughness: 0.6 })
+        new THREE.IcosahedronGeometry(0.15, 2),
+        new THREE.MeshStandardMaterial({ color: 0xff6d84, emissive: 0x441424, roughness: 0.45, metalness: 0.35 })
       );
-      asteroid.position.set(3, 0, 0);
-      scene.add(asteroid);
+      asteroid.position.set(state.orbitParams.semiMajor, 0, 0);
 
-      const light = new THREE.PointLight(0xffffff, 2, 100);
-      light.position.set(6, 6, 6);
-      scene.add(light);
-      scene.add(new THREE.AmbientLight(0x404040));
+      const trailSegments = 160;
+      const trailPositions = new Float32Array(trailSegments * 3);
+      const trailGeometry = new THREE.BufferGeometry();
+      trailGeometry.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+      const trailMaterial = new THREE.LineBasicMaterial({ color: 0xff6d84, transparent: true, opacity: 0.55 });
+      const trail = new THREE.Line(trailGeometry, trailMaterial);
 
-      camera.position.set(0, 3, 7);
+      const orbitGroup = new THREE.Group();
+      orbitGroup.add(orbit);
+      orbitGroup.add(asteroid);
+      orbitGroup.add(trail);
+      scene.add(orbitGroup);
 
+      camera.lookAt(orbitGroup.position);
+
+      state.orbitScene = scene;
+      state.orbitCamera = camera;
+      state.orbitRenderer = renderer;
       state.orbit = orbit;
       state.asteroidMesh = asteroid;
+      state.orbitGroup = orbitGroup;
+      state.orbitTrail = { line: trail, positions: trailPositions };
+      state.baseOrbitParams = { ...state.orbitParams };
+
+  setupOrbitInteractions(renderer.domElement);
+  updateCameraFromControls();
+
+      refreshOrbitGeometry();
+      renderOrbitOverlay(state.currentNeo);
+      applyDeltaVToOrbit(Number(document.getElementById('delta-v').value || 0));
+      handleOrbitResize();
 
       function animate() {
         requestAnimationFrame(animate);
-        const time = Date.now() * 0.00025;
-        asteroid.position.x = 3 * Math.cos(time);
-        asteroid.position.z = 1.8 * Math.sin(time);
-        asteroid.rotation.y += 0.01;
+        const params = state.orbitParams || state.baseOrbitParams;
+        const periodMs = Math.max(1, params.periodDays) * 24 * 60 * 60 * 1000;
+        const angle = ((Date.now() % periodMs) / periodMs) * (Math.PI * 2);
+        const x = params.semiMajor * Math.cos(angle);
+        const z = params.semiMinor * Math.sin(angle);
+        state.asteroidMesh.position.set(x, 0, z);
+        state.asteroidMesh.rotation.y += 0.01;
+        if (state.orbitTrail) {
+          const positions = state.orbitTrail.positions;
+          for (let i = positions.length - 3; i >= 3; i -= 3) {
+            positions[i] = positions[i - 3];
+            positions[i + 1] = positions[i - 2];
+            positions[i + 2] = positions[i - 1];
+          }
+          positions[0] = x;
+          positions[1] = 0;
+          positions[2] = z;
+          state.orbitTrail.line.geometry.attributes.position.needsUpdate = true;
+        }
+        updateCameraFromControls();
         renderer.render(scene, camera);
       }
       animate();
@@ -676,6 +1227,7 @@
       initCountdown();
       initMap();
       initOrbit();
+      window.addEventListener('resize', handleOrbitResize);
       loadSampleNeo();
       renderScenarioVault();
       simulate();
