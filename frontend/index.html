@@ -38,9 +38,9 @@
         </div>
         <div class="hero-metrics">
           <div class="metric-card">
-            <p class="metric-label">Hackathon Clock</p>
-            <p class="metric-value" id="hackathon-countdown">48h 00m</p>
-            <p class="metric-sub">until NASA NEO feed unlocks</p>
+            <p class="metric-label">Next Close Approach</p>
+            <p class="metric-value" id="neo-approach-countdown">—</p>
+            <p class="metric-sub" id="neo-approach-date">Awaiting NeoWs data</p>
           </div>
           <div class="metric-card">
             <p class="metric-label">Live Risk Level</p>
@@ -123,6 +123,25 @@
           <p>Impact Location: <span id="impact-location">Tap the map</span></p>
           <button class="secondary" id="reset-location">Reset</button>
         </div>
+        <br><br>
+        <div class="timeline">
+            <p class="section-label">Response Timeline</p>
+            <ul id="response-timeline">
+              <li>Awaiting simulation...</li>
+            </ul>
+          </div>
+        <br><br>
+        <div class="mission-notes-card">
+              <div class="notes-header">
+                <h3>Mission Control Notes</h3>
+                <button class="ghost" id="save-note">Add Mission Note</button>
+              </div>
+              <ul class="notes" id="mission-notes">
+                <li>Assign a landing pad for kinetic impactor follow-up.</li>
+                <li>Cross-check regional DEM before rendering crater overlays.</li>
+                <li>Queue NASA NeoWs API key in <code>app.py</code> before the live window.</li>
+              </ul>
+            </div>
       </article>
 
       <article class="card stats-panel">
@@ -153,34 +172,18 @@
           </div>
         </div>
         <div class="insights">
-          <div class="severity">
-            <p class="section-label">Severity Meter</p>
-            <div class="severity-meter" id="severity-meter">
-              <div class="severity-fill" id="severity-fill"></div>
+          <div class="insights-left">
+            <div class="severity">
+              <p class="section-label">Severity Meter</p>
+              <div class="severity-meter" id="severity-meter">
+                <div class="severity-fill" id="severity-fill"></div>
+              </div>
+              <p class="hint" id="severity-detail">Adjust parameters to generate insights.</p>
             </div>
-            <p class="hint" id="severity-detail">Adjust parameters to generate insights.</p>
-          </div>
-          <div class="timeline">
-            <p class="section-label">Response Timeline</p>
-            <ul id="response-timeline">
-              <li>Awaiting simulation...</li>
-            </ul>
           </div>
         </div>
-        <canvas id="impact-chart" height="180"></canvas>
+        <canvas id="impact-chart" height="160"></canvas>
       </article>
-
-      <aside class="card briefing-panel">
-        <header>
-          <h2>Mission Control Notes</h2>
-        </header>
-        <ul class="notes" id="mission-notes">
-          <li>Assign a landing pad for kinetic impactor follow-up.</li>
-          <li>Cross-check regional DEM before rendering crater overlays.</li>
-          <li>Queue NASA NeoWs API key in <code>app.py</code> before the live window.</li>
-        </ul>
-        <button class="ghost" id="save-note">Add Mission Note</button>
-      </aside>
     </section>
 
     <section class="visual-section" id="visualizations">
@@ -333,6 +336,12 @@
         distance: 8
       },
       orbitTrail: null,
+      moon: null,
+      moonGroup: null,
+      moonLight: null,
+      moonOrbitLine: null,
+      moonOrbitRadius: 6,
+      moonOrbitPeriodDays: 27.3,
       baseOrbitParams: {
         semiMajor: 3,
         semiMinor: 1.8,
@@ -349,7 +358,6 @@
       },
       chart: null,
       scenarios: [],
-      countdownTarget: Date.now() + (48 * 60 * 60 * 1000),
       lastReadiness: 98.6,
       currentNeo: null
     };
@@ -368,10 +376,10 @@
       { threshold: Infinity, label: 'Extinction-Level', tagline: 'Survival-level event. Deploy every asset.', color: '#ff2e63' }
     ];
 
-    document.getElementById('hero-run').addEventListener('click', simulate);
+  document.getElementById('hero-run').addEventListener('click', handleRunImpact);
     document.getElementById('hero-save').addEventListener('click', saveScenario);
     document.getElementById('save-note').addEventListener('click', addMissionNote);
-    document.getElementById('cta-brief').addEventListener('click', () => showToast('Mission brief download queued. Attach NASA NeoWs data post-release.'));
+    document.getElementById('cta-brief').addEventListener('click', downloadMissionBrief);
     document.getElementById('reset-location').addEventListener('click', () => {
       state.impactLat = null;
       state.impactLng = null;
@@ -485,6 +493,7 @@
       }
 
       document.getElementById('neo-name').textContent = `${name}${idLabel}`;
+  updateApproachMetric(neo);
 
       const facts = [];
       if (neo.estimated_diameter_min_m && neo.estimated_diameter_max_m) {
@@ -583,6 +592,33 @@
       return Math.max(min, Math.min(max, Number(value)));
     }
 
+    async function handleRunImpact(event) {
+      if (event && typeof event.preventDefault === 'function') {
+        event.preventDefault();
+      }
+      const button = event?.currentTarget;
+      const originalLabel = button?.textContent || 'Run Impact Simulation';
+      if (button) {
+        button.disabled = true;
+        button.textContent = 'Running…';
+      }
+      try {
+        const result = await simulate();
+        if (result) {
+          const controlSection = document.getElementById('control');
+          if (controlSection) {
+            controlSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+          showToast('Impact simulation updated.');
+        }
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalLabel;
+        }
+      }
+    }
+
     async function simulate() {
       const payload = {
         diameter: Number(document.getElementById('diameter').value),
@@ -604,8 +640,10 @@
         refreshLeaderboard(report.readiness);
         applyDeltaVToOrbit(payload.delta_v);
         updateCraterOnMap(data.crater_diameter_m);
+        return data;
       } catch (error) {
         showToast('Simulation API unreachable. Ensure Flask backend is running.', true);
+        return null;
       }
     }
 
@@ -870,6 +908,31 @@
       return parsed;
     }
 
+    function updateApproachMetric(neo) {
+      const countdownEl = document.getElementById('neo-approach-countdown');
+      const dateEl = document.getElementById('neo-approach-date');
+      if (!countdownEl || !dateEl) return;
+  const closeApproach = neo && neo.close_approach_date ? neo.close_approach_date : null;
+  const targetDate = parseNeoDate(closeApproach);
+      if (!targetDate) {
+        countdownEl.textContent = '—';
+        dateEl.textContent = 'No upcoming approach data.';
+        return;
+      }
+      const now = new Date();
+      const diffMs = targetDate.getTime() - now.getTime();
+      const diffDays = Math.floor(Math.abs(diffMs) / (1000 * 60 * 60 * 24));
+      const diffHours = Math.floor((Math.abs(diffMs) / (1000 * 60 * 60)) % 24);
+      const label = `${diffDays}d ${diffHours.toString().padStart(2, '0')}h`;
+      if (diffMs >= 0) {
+        countdownEl.textContent = label;
+        dateEl.textContent = `Scheduled for ${targetDate.toLocaleString()}`;
+      } else {
+        countdownEl.textContent = label;
+        dateEl.textContent = `Last approach on ${targetDate.toLocaleString()}`;
+      }
+    }
+
     function handleOrbitResize() {
       if (!state.orbitRenderer || !state.orbitCamera) return;
       const stage = document.getElementById('orbit-stage');
@@ -929,8 +992,9 @@
 
       const onWheel = (event) => {
         event.preventDefault();
-        controls.distance += event.deltaY * 0.0025;
-        controls.distance = Math.max(2.5, Math.min(16, controls.distance));
+        const zoomDelta = event.deltaY * 0.0045;
+        controls.distance += zoomDelta;
+        controls.distance = Math.max(1.8, Math.min(14, controls.distance));
         updateCameraFromControls();
       };
 
@@ -955,18 +1019,35 @@
 
     function buildStarfield(scene) {
       const starGeometry = new THREE.BufferGeometry();
-      const starCount = 650;
+      const starCount = 950;
       const positions = new Float32Array(starCount * 3);
+      const colors = new Float32Array(starCount * 3);
+      const color = new THREE.Color();
       for (let i = 0; i < starCount; i += 1) {
-        const radius = 18 + Math.random() * 14;
+        const radius = 22 + Math.random() * 24;
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos((Math.random() * 2) - 1);
         positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
         positions[i * 3 + 1] = radius * Math.cos(phi) * 0.45;
         positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+        const hue = 0.55 + Math.random() * 0.1;
+        const lightness = 0.7 + Math.random() * 0.28;
+        color.setHSL(hue, 0.25 + Math.random() * 0.25, Math.min(1, lightness));
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
       }
       starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.06, transparent: true, opacity: 0.8 });
+      starGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      const starMaterial = new THREE.PointsMaterial({
+        size: 0.12,
+        vertexColors: true,
+        transparent: true,
+        opacity: 1,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        sizeAttenuation: true
+      });
       const stars = new THREE.Points(starGeometry, starMaterial);
       scene.add(stars);
     }
@@ -1060,18 +1141,115 @@
       setTimeout(() => toast.classList.remove('show'), 3200);
     }
 
-    function initCountdown() {
-      const el = document.getElementById('hackathon-countdown');
-      const update = () => {
-        const remaining = Math.max(0, state.countdownTarget - Date.now());
-        const hours = Math.floor(remaining / (1000 * 60 * 60));
-        const mins = Math.floor((remaining / (1000 * 60)) % 60);
-        el.textContent = `${hours.toString().padStart(2, '0')}h ${mins.toString().padStart(2, '0')}m`;
-      };
-      update();
-      setInterval(() => {
-        update();
-      }, 60 * 1000);
+    function downloadMissionBrief() {
+      try {
+        const now = new Date();
+        const header = `Mission Brief — ${now.toLocaleString()}`;
+        const lines = [header, ''.padStart(header.length, '='), ''];
+
+        const neo = state.currentNeo;
+        lines.push('NEO Target:');
+        if (neo) {
+          lines.push(
+            `- Name: ${neo.name || 'Unknown NEO'}`,
+            `- Requested ID: ${neo.requested_id || neo.id || '—'}`,
+            `- Resolved ID: ${neo.resolved_id || neo.id || '—'}`,
+            `- Close Approach: ${neo.close_approach_date || '—'}`,
+            `- Velocity: ${neo.velocity_kms !== undefined ? `${neo.velocity_kms} km/s` : '—'}`,
+            `- Miss Distance: ${neo.miss_distance_km ? `${neo.miss_distance_km.toLocaleString()} km` : '—'}`,
+            `- Potentially Hazardous: ${typeof neo.potentially_hazardous === 'boolean' ? (neo.potentially_hazardous ? 'Yes' : 'No') : '—'}`
+          );
+        } else {
+          lines.push('- Awaiting NASA NeoWs data. Fetch a NEO to include live intel.');
+        }
+
+        lines.push('', 'Impact Parameters:');
+        const diameterInput = document.getElementById('diameter');
+        const velocityInput = document.getElementById('velocity');
+        const densityInput = document.getElementById('density');
+        const deltaVInput = document.getElementById('delta-v');
+        lines.push(
+          `- Diameter: ${diameterInput ? `${diameterInput.value} m` : '—'}`,
+          `- Velocity: ${velocityInput ? `${velocityInput.value} km/s` : '—'}`,
+          `- Density: ${densityInput ? `${densityInput.value} kg/m³` : '—'}`,
+          `- Deflection Δv: ${deltaVInput ? `${deltaVInput.value} km/s` : '—'}`
+        );
+
+        lines.push('', 'Simulation Metrics:');
+        const metricPairs = [
+          ['Kinetic Energy', document.getElementById('metric-ke')?.textContent?.trim()],
+          ['TNT Equivalent', document.getElementById('metric-tnt')?.textContent?.trim()],
+          ['Crater Diameter', document.getElementById('metric-crater')?.textContent?.trim()],
+          ['Seismic Magnitude', document.getElementById('metric-seismic')?.textContent?.trim()]
+        ];
+        metricPairs.forEach(([label, value]) => {
+          lines.push(`- ${label}: ${value || '—'}`);
+        });
+
+        lines.push('', 'Severity & Readiness:');
+        const severityLabel = document.getElementById('severity-label')?.textContent?.trim() || '—';
+        const severityTagline = document.getElementById('severity-tagline')?.textContent?.trim();
+        const severityDetail = document.getElementById('severity-detail')?.textContent?.trim();
+        lines.push(`- Severity Level: ${severityLabel}`);
+        if (severityTagline) {
+          lines.push(`- Tagline: ${severityTagline}`);
+        }
+        if (severityDetail) {
+          lines.push(`- Detail: ${severityDetail}`);
+        }
+        lines.push(`- Mission Readiness: ${Number.isFinite(state.lastReadiness) ? `${state.lastReadiness.toFixed(1)}%` : '—'}`);
+
+        const missionBriefEl = document.getElementById('mission-brief');
+        const briefText = missionBriefEl?.innerText?.trim();
+        if (briefText) {
+          lines.push('', 'Mission Brief Narrative:', briefText);
+        }
+
+        const timelineItems = Array.from(document.querySelectorAll('#response-timeline li'))
+          .map(item => item.textContent.trim())
+          .filter(Boolean);
+        lines.push('', 'Response Timeline:');
+        if (timelineItems.length) {
+          timelineItems.forEach(item => lines.push(`- ${item}`));
+        } else {
+          lines.push('- Awaiting simulation results.');
+        }
+
+        const noteItems = Array.from(document.querySelectorAll('#mission-notes li'))
+          .map(item => item.textContent.trim())
+          .filter(Boolean);
+        lines.push('', 'Mission Control Notes:');
+        if (noteItems.length) {
+          noteItems.forEach(note => lines.push(`- ${note}`));
+        } else {
+          lines.push('- No notes recorded.');
+        }
+
+        lines.push('', 'Scenario Vault Snapshot:');
+        if (Array.isArray(state.scenarios) && state.scenarios.length) {
+          state.scenarios.forEach(scenario => {
+            lines.push(`- ${scenario.timestamp}: ${scenario.severity} • ${scenario.diameter} m @ ${scenario.velocity} km/s • readiness ${scenario.readiness}% (${scenario.location})`);
+          });
+        } else {
+          lines.push('- No scenarios saved yet.');
+        }
+
+        lines.push('', 'Generated via Meteor Madness Mission Control — NASA Space Apps 2025');
+
+        const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `mission-brief-${now.toISOString().replace(/[:.]/g, '-')}.txt`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+        showToast('Mission brief downloaded to your device.');
+      } catch (error) {
+        console.error('Mission brief download failed:', error);
+        showToast('Unable to download mission brief. Try again after running a simulation.', true);
+      }
     }
 
     function initMap() {
@@ -1110,6 +1288,10 @@
         state.orbitControls.dispose();
         state.orbitControls = null;
       }
+      state.moon = null;
+      state.moonGroup = null;
+      state.moonLight = null;
+      state.moonOrbitLine = null;
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 200);
       camera.position.set(0, 3.2, 7.5);
@@ -1117,43 +1299,88 @@
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
       renderer.setSize(width, height);
+      renderer.setClearColor(0x050b18, 1);
       stage.innerHTML = '';
       stage.appendChild(renderer.domElement);
 
-      const ambient = new THREE.AmbientLight(0x142338, 0.7);
-      scene.add(ambient);
-      const keyLight = new THREE.PointLight(0xfff2c7, 1.6, 65);
-      keyLight.position.set(6, 7, 5);
-      scene.add(keyLight);
-      const rimLight = new THREE.PointLight(0x6dcff6, 0.75, 80);
-      rimLight.position.set(-8, -5, -6);
-      scene.add(rimLight);
+      const deepBackdrop = new THREE.Mesh(
+        new THREE.SphereGeometry(80, 64, 64),
+        new THREE.MeshBasicMaterial({ color: 0x020612, side: THREE.BackSide, transparent: true, opacity: 0.92 })
+      );
+      scene.add(deepBackdrop);
 
       buildStarfield(scene);
 
-      const sun = new THREE.Mesh(
-        new THREE.SphereGeometry(0.45, 28, 28),
-        new THREE.MeshStandardMaterial({ color: 0xfff4a8, emissive: 0xffe066, emissiveIntensity: 0.9, roughness: 0.2 })
+      const ambient = new THREE.AmbientLight(0x142338, 0.55);
+      scene.add(ambient);
+      const rimLight = new THREE.PointLight(0x6dcff6, 0.65, 90);
+      rimLight.position.set(7, -4, 9);
+      scene.add(rimLight);
+
+      const sunGroup = new THREE.Group();
+      sunGroup.position.set(-14, 3.5, -20);
+      const sunCore = new THREE.Mesh(
+        new THREE.SphereGeometry(3.2, 48, 48),
+        new THREE.MeshStandardMaterial({ color: 0xfff2a8, emissive: 0xffd166, emissiveIntensity: 1.4, roughness: 0.18, metalness: 0.1 })
       );
-      scene.add(sun);
-      const sunGlow = new THREE.Mesh(
-        new THREE.RingGeometry(0.55, 0.85, 64),
-        new THREE.MeshBasicMaterial({ color: 0xfff8d2, transparent: true, opacity: 0.3, side: THREE.DoubleSide })
+      sunGroup.add(sunCore);
+      const sunCorona = new THREE.Mesh(
+        new THREE.RingGeometry(3.6, 5.6, 96),
+        new THREE.MeshBasicMaterial({ color: 0xfff9d5, transparent: true, opacity: 0.32, side: THREE.DoubleSide })
       );
-      sunGlow.rotation.x = Math.PI / 2;
-      scene.add(sunGlow);
+      sunCorona.rotation.x = Math.PI / 2;
+      sunGroup.add(sunCorona);
+      const sunFlare = new THREE.Mesh(
+        new THREE.RingGeometry(5.8, 7.8, 120),
+        new THREE.MeshBasicMaterial({ color: 0xffc15f, transparent: true, opacity: 0.16, side: THREE.DoubleSide })
+      );
+      sunFlare.rotation.x = Math.PI / 2;
+      sunGroup.add(sunFlare);
+      scene.add(sunGroup);
+
+      const sunLight = new THREE.DirectionalLight(0xfff3c4, 1.25);
+      sunLight.position.copy(sunGroup.position);
+      sunLight.target.position.set(0, 0, 0);
+      scene.add(sunLight);
+      scene.add(sunLight.target);
+      const fillLight = new THREE.PointLight(0xffb387, 0.4, 60);
+      fillLight.position.set(-6, 6, -12);
+      scene.add(fillLight);
 
       const earth = new THREE.Mesh(
         new THREE.SphereGeometry(1, 48, 48),
         new THREE.MeshStandardMaterial({ color: 0x2f6bff, emissive: 0x12305f, roughness: 0.35, metalness: 0.15 })
       );
+      earth.rotation.z = -23.5 * (Math.PI / 180);
       scene.add(earth);
       const earthGlow = new THREE.Mesh(
-        new THREE.RingGeometry(1.05, 1.3, 90),
-        new THREE.MeshBasicMaterial({ color: 0x4fb7ff, transparent: true, opacity: 0.12, side: THREE.DoubleSide })
+        new THREE.RingGeometry(1.05, 1.35, 96),
+        new THREE.MeshBasicMaterial({ color: 0x4fb7ff, transparent: true, opacity: 0.16, side: THREE.DoubleSide })
       );
       earthGlow.rotation.x = Math.PI / 2;
       scene.add(earthGlow);
+
+      const moonOrbitRadius = state.moonOrbitRadius || 6;
+      const moonGroup = new THREE.Group();
+      moonGroup.position.set(0, 0, 0);
+      const moon = new THREE.Mesh(
+        new THREE.SphereGeometry(0.27, 32, 32),
+        new THREE.MeshStandardMaterial({ color: 0xdedcd4, emissive: 0x2b2a28, emissiveIntensity: 0.25, roughness: 0.8, metalness: 0.05 })
+      );
+      moon.position.set(moonOrbitRadius, 0, 0);
+      moonGroup.add(moon);
+      const moonOrbitCurve = new THREE.EllipseCurve(0, 0, moonOrbitRadius, moonOrbitRadius);
+      const moonOrbitPoints = moonOrbitCurve.getPoints(256).map(point => new THREE.Vector3(point.x, 0, point.y));
+      const moonOrbitGeometry = new THREE.BufferGeometry().setFromPoints(moonOrbitPoints);
+      const moonOrbitMaterial = new THREE.LineBasicMaterial({ color: 0x9ec5ff, transparent: true, opacity: 0.45 });
+      const moonOrbitLine = new THREE.LineLoop(moonOrbitGeometry, moonOrbitMaterial);
+      moonGroup.add(moonOrbitLine);
+      const moonInclination = 5.145 * (Math.PI / 180);
+      moonGroup.rotation.x = moonInclination;
+      const moonLight = new THREE.PointLight(0x9bb7ff, 0.4, 14);
+      moonLight.position.copy(moon.position);
+      moonGroup.add(moonLight);
+      scene.add(moonGroup);
 
       const orbitMaterial = new THREE.LineDashedMaterial({ color: 0xffd166, dashSize: 0.2, gapSize: 0.05 });
       const orbit = new THREE.Line(new THREE.BufferGeometry(), orbitMaterial);
@@ -1186,10 +1413,14 @@
       state.asteroidMesh = asteroid;
       state.orbitGroup = orbitGroup;
       state.orbitTrail = { line: trail, positions: trailPositions };
+      state.moon = moon;
+      state.moonGroup = moonGroup;
+      state.moonLight = moonLight;
+      state.moonOrbitLine = moonOrbitLine;
       state.baseOrbitParams = { ...state.orbitParams };
 
-  setupOrbitInteractions(renderer.domElement);
-  updateCameraFromControls();
+      setupOrbitInteractions(renderer.domElement);
+      updateCameraFromControls();
 
       refreshOrbitGeometry();
       renderOrbitOverlay(state.currentNeo);
@@ -1198,9 +1429,10 @@
 
       function animate() {
         requestAnimationFrame(animate);
+        const now = Date.now();
         const params = state.orbitParams || state.baseOrbitParams;
         const periodMs = Math.max(1, params.periodDays) * 24 * 60 * 60 * 1000;
-        const angle = ((Date.now() % periodMs) / periodMs) * (Math.PI * 2);
+        const angle = ((now % periodMs) / periodMs) * (Math.PI * 2);
         const x = params.semiMajor * Math.cos(angle);
         const z = params.semiMinor * Math.sin(angle);
         state.asteroidMesh.position.set(x, 0, z);
@@ -1217,14 +1449,24 @@
           positions[2] = z;
           state.orbitTrail.line.geometry.attributes.position.needsUpdate = true;
         }
+        if (state.moonGroup && state.moon) {
+          const moonPeriodDays = state.moonOrbitPeriodDays || 27.3;
+          const moonPeriodMs = moonPeriodDays * 24 * 60 * 60 * 1000;
+          const visualSpeedFactor = 48000; // compress real period so motion is visible (~48s per orbit)
+          const moonAngle = (now / (moonPeriodMs / visualSpeedFactor)) % (Math.PI * 2);
+          state.moonGroup.rotation.y = moonAngle;
+          state.moon.rotation.y += 0.012;
+          if (state.moonLight) {
+            state.moonLight.position.copy(state.moon.position);
+          }
+        }
         updateCameraFromControls();
         renderer.render(scene, camera);
       }
-      animate();
+    animate();
     }
 
     function init() {
-      initCountdown();
       initMap();
       initOrbit();
       window.addEventListener('resize', handleOrbitResize);
