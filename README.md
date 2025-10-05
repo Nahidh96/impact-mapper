@@ -1,3 +1,11 @@
+<h3 align="center">
+  <img src="https://img.shields.io/badge/NASA%20Space%20Apps-2025-blue?style=for-the-badge&logo=nasa" />
+  <img src="https://img.shields.io/badge/Mission-Meteor%20Madness-orange?style=for-the-badge&logo=meteor" />
+  <img src="https://img.shields.io/badge/Team-Syntax-green?style=for-the-badge&logo=rocket" />
+</h3>
+
+# 🚀 Meteor Madness - NASA Space Apps Hackathon
+
 # Meteor Madness - NASA Space Apps Hackathon
 
 ## Overview
